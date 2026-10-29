@@ -194,25 +194,66 @@ All API responses follow a uniform, developer-friendly JSON envelope:
 
 ### Key Endpoints
 
-| Method | Endpoint | Description | Sample Query / Body |
+| Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/health` | System vitals, uptime, memory & DB state | None |
-| `GET` | `/api/v1/health` | Versioned health check | None |
-| `GET` | `/api/v1/movies` | Fetch all movies with filters & pagination | `?genre=Sci-Fi&status=now_showing` |
-| `GET` | `/api/v1/movies/:id` | Fetch detailed movie record | None |
-| `POST` | `/api/v1/movies` | Register new movie (Admin) | `{ "title": "Dune 3", "genre": ["Sci-Fi"], "duration": 150 }` |
+| `POST` | `/api/v1/auth/register` | Public | Register user account with bcrypt password hashing |
+| `POST` | `/api/v1/auth/login` | Public | Sign in with email & password, receive access/refresh JWT |
+| `GET` | `/api/v1/auth/me` | Protected | Retrieve authenticated user profile |
+| `POST` | `/api/v1/auth/refresh` | Public | Refresh expired access token |
+| `GET` | `/api/v1/users/profile` | Protected | Fetch current user preferences & settings |
+| `PATCH` | `/api/v1/users/profile` | Protected | Update profile, favorite genres, accessibility |
+| `PUT` | `/api/v1/users/password`| Protected | Change account password |
+| `GET` | `/api/v1/movies` | Public | Discover movies with text search, genre, and pagination |
+| `GET` | `/api/v1/movies/:id` | Public | Get detailed movie metadata and cast list |
+| `POST` | `/api/v1/movies` | Admin | Register new cinema release |
+| `GET` | `/api/v1/theatres` | Public | List theatres with city and accessibility filters |
+| `GET` | `/api/v1/theatres/:id` | Public | Get venue details and screen specifications |
+| `GET` | `/api/v1/shows` | Public | Query showtimes by movie, theatre, and date |
+| `GET` | `/api/v1/shows/:id` | Public | Get show details with format & tier pricing |
+| `GET` | `/api/v1/seats/show/:id`| Public | Fetch real-time seat availability map |
+| `POST` | `/api/v1/seats/hold` | Protected | Temporarily hold seats (10-min TTL, atomic constraint) |
+| `POST` | `/api/v1/seats/release`| Protected | Release held seats |
+| `POST` | `/api/v1/bookings` | Protected | Create booking with server-calculated pricing |
+| `GET` | `/api/v1/bookings` | Protected | List authenticated user's bookings |
+| `GET` | `/api/v1/bookings/:id` | Protected | Get booking by ID (enforces object ownership) |
+| `POST` | `/api/v1/bookings/:id/cancel` | Protected | Cancel booking and initiate refund |
+| `GET` | `/api/v1/bookings/admin/all` | Admin | View all bookings across system |
+| `POST` | `/api/v1/payments/process` | Protected | Process payment (supports dev mock & providers) |
+| `GET` | `/api/v1/notifications`| Protected | List user notifications |
+| `GET` | `/api/v1/admin/overview`| Admin | Consolidated box office analytics overview |
+| `GET` | `/api/health` | Public | Health vitals and database connection status |
 
 ### Testing with Postman or Curl
 
 ```bash
-# 1. Health check
-curl -X GET http://localhost:5000/api/health
+# 1. Register a user
+curl -X POST http://localhost:5000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Jane Doe","email":"jane@example.com","password":"Password123!"}'
 
-# 2. Get now showing movies
-curl -X GET "http://localhost:5000/api/v1/movies?status=now_showing"
+# 2. Login to get JWT
+curl -X POST http://localhost:5000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"jane@example.com","password":"Password123!"}'
 
-# 3. Filter by genre
+# 3. Access protected user profile
+curl -X GET http://localhost:5000/api/v1/auth/me \
+  -H "Authorization: Bearer <YOUR_ACCESS_TOKEN>"
+
+# 4. Filter movies by genre
 curl -X GET "http://localhost:5000/api/v1/movies?genre=Sci-Fi"
+```
+
+---
+
+## Database Seeding
+
+To populate MongoDB with baseline users (`admin@imovies.com`, `user@imovies.com`), partner theatres, auditoriums, physical seats, movies, and showtimes:
+
+```bash
+npm run seed
+# or to clear and re-seed:
+npm run seed -- --force
 ```
 
 ---
@@ -225,15 +266,22 @@ npm test
 ```
 The Jest suite validates:
 - System health reporting (`/api/health` & `/api/v1/health`)
-- Movie catalogue querying, filtering by genre, and pagination metadata
-- Proper 404 responses for unrecognized routes
-- Error formatting and stack trace suppression
+- User registration, normalization, and duplicate email prevention (409)
+- Login validation, bcrypt password hashing, and token generation
+- Password privacy (hash is never returned in JSON responses)
+- Invalid or expired JWT rejection (401)
+- Role-Based Access Control: USER denied access to ADMIN-only routes (403)
+- Object-level ownership protection: User B forbidden from viewing User A's booking (403)
+- Seat hold uniqueness: Database constraint rejecting colliding seat holds (409)
+- Booking creation with server-side price recalculation
+- Movie catalogue querying, filtering by genre, search, and pagination
+- Route not found (404) and error handling
 
 ---
 
 ## Implementation Roadmap (Parts 1–5)
 
-- [x] **Part 1 (Current)**:
+- [x] **Part 1**:
   - Repository audit and baseline setup.
   - Express architecture with security headers, rate limiting, and centralized error handling.
   - Light, professional UI foundation with Bootstrap 5 and custom design tokens.
@@ -241,15 +289,20 @@ The Jest suite validates:
   - Live movie catalogue endpoints and health check.
   - Automated integration testing and build verification.
 
-- [ ] **Part 2**:
-  - Full MongoDB Mongoose schemas (User, Movie, Theatre, Screen, Show, Booking, Review).
-  - JWT authentication with refresh token rotation and role-based access control (RBAC).
-  - User registration, profile updates, and password management.
+- [x] **Part 2 (Current)**:
+  - Core Mongoose models: `User`, `Movie`, `Theatre`, `Show`, `Seat`, `SeatLock`, `Booking`, `Payment`, `Notification`.
+  - Database-level compound unique indexing on `(show, seatNumber)` for anti-double-booking concurrency protection with TTL holds.
+  - Full-text search index on movies and compound indexes on shows and bookings.
+  - JWT authentication with access/refresh tokens and bcryptjs hashing (password hash privacy).
+  - Role-based authorization (`USER`, `ADMIN`) and object-level record ownership protection.
+  - Complete REST API route groups (`auth`, `users`, `movies`, `theatres`, `shows`, `seats`, `bookings`, `payments`, `notifications`, `admin`).
+  - Safe database seeder script (`server/src/scripts/seed.js`).
+  - 32 automated integration tests passing with 100% success.
 
 - [ ] **Part 3**:
-  - Cinema scheduling engine and dynamic seat layout builder.
-  - Real-time seat hold locks using Socket.IO to prevent double-booking.
-  - Concessions ordering and snack inventory management.
+  - Dynamic interactive cinema scheduling engine and seat layout configuration.
+  - Real-time seat hold locks and state broadcasting using Socket.IO.
+  - Concessions/food ordering and inventory management.
 
 - [ ] **Part 4**:
   - Multi-provider payment gateway integration (Stripe, Razorpay, and Dev Mock).

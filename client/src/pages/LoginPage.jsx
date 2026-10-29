@@ -3,9 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   loginSuccess,
+  loginStart,
+  loginFailure,
   loginDemoUser,
   loginDemoAdmin,
 } from '../features/auth/authSlice';
+import { authApi } from '../services/api';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import { toast } from 'react-toastify';
@@ -30,28 +33,30 @@ const LoginPage = () => {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
-    // Simulate login for Part 1 foundation (Full JWT / DB in Part 2)
-    const simulatedUser = {
-      id: `usr_${Date.now()}`,
-      name: email.split('@')[0],
-      email,
-      role: email.includes('admin') ? 'admin' : 'user',
-      phone: '+1 (555) 012-3456',
-    };
+    dispatch(loginStart());
 
-    dispatch(
-      loginSuccess({
-        user: simulatedUser,
-        token: `jwt_token_${Date.now()}`,
-      })
-    );
+    try {
+      const response = await authApi.login({ email, password });
+      const { user, accessToken } = response.data;
 
-    toast.success(`Welcome back, ${simulatedUser.name}!`);
-    navigate(simulatedUser.role === 'admin' ? '/admin' : '/');
+      dispatch(
+        loginSuccess({
+          user,
+          token: accessToken,
+        })
+      );
+
+      toast.success(`Welcome back, ${user.name}!`);
+      navigate(user.role === 'ADMIN' ? '/admin' : '/');
+    } catch (err) {
+      // In case server is offline or running standalone without backend
+      dispatch(loginFailure(err.message || 'Authentication failed.'));
+      toast.error(err.message || 'Invalid email or password.');
+    }
   };
 
   return (

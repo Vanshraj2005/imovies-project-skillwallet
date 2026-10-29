@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { loginSuccess } from '../features/auth/authSlice';
+import { authApi } from '../services/api';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import { toast } from 'react-toastify';
@@ -43,33 +44,35 @@ const RegisterPage = () => {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
     setLoading(true);
 
-    // Simulated registration
-    setTimeout(() => {
-      const newUser = {
-        id: `usr_${Date.now()}`,
+    try {
+      const response = await authApi.register({
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
-        role: 'user',
-      };
+        password: formData.password,
+      });
 
+      const { user, accessToken } = response.data;
       dispatch(
         loginSuccess({
-          user: newUser,
-          token: `jwt_token_${Date.now()}`,
+          user,
+          token: accessToken,
         })
       );
 
-      setLoading(false);
       toast.success('Registration successful! Welcome to IMovies.');
       navigate('/');
-    }, 700);
+    } catch (err) {
+      toast.error(err.message || 'Registration failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

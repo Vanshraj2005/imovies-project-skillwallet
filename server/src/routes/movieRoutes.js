@@ -1,14 +1,26 @@
 /**
  * Movie Routes
- * Handles GET /api/v1/movies and GET /api/v1/movies/:id
+ * /api/v1/movies
  */
 const express = require('express');
-const { getMovies, getMovieById, createMovie } = require('../controllers/movieController');
+const {
+  getMovies,
+  getMovieById,
+  createMovie,
+  updateMovie,
+  deleteMovie,
+} = require('../controllers/movieController');
+const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Public discovery endpoints
 router.get('/', getMovies);
 router.get('/:id', getMovieById);
-router.post('/', createMovie);
+
+// Admin-only management endpoints
+router.post('/', protect, authorize('ADMIN'), createMovie);
+router.put('/:id', protect, authorize('ADMIN'), updateMovie);
+router.delete('/:id', protect, authorize('ADMIN'), deleteMovie);
 
 module.exports = router;

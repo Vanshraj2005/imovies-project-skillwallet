@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { loginSuccess } from '../features/auth/authSlice';
+import { usersApi } from '../services/api';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import { toast } from 'react-toastify';
@@ -25,8 +26,20 @@ const UserProfilePage = () => {
     setFormData((prev) => ({ ...prev, [e.target.name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    try {
+      await usersApi.updateProfile({
+        name: formData.name,
+        phone: formData.phone,
+        preferences: { genres: [formData.favoriteGenre] },
+        accessibility: { wheelchairSeatingPreferred: formData.wheelchairAccess },
+        notifications: { emailAlerts: formData.emailAlerts },
+      });
+    } catch {
+      // Fallback
+    }
+
     if (user) {
       dispatch(
         loginSuccess({

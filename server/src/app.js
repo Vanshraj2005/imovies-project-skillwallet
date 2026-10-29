@@ -41,8 +41,9 @@ app.use('/api', apiLimiter);
 app.use('/api/health', healthRoutes);
 app.use('/api/v1/health', healthRoutes);
 
-// Versioned API Routes
+// API Routes (supports both /api/v1 and /api)
 app.use('/api/v1', apiRouter);
+app.use('/api', apiRouter);
 
 // 404 Handler for unmatched routes
 app.use(notFoundHandler);
