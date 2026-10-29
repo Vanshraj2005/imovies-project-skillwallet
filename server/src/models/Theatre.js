@@ -105,3 +105,4 @@ theatreSchema.index({ location: '2dsphere' });
 const Theatre = mongoose.model('Theatre', theatreSchema);
 
 module.exports = Theatre;
+

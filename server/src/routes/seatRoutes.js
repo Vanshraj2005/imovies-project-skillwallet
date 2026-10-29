@@ -17,3 +17,4 @@ router.post('/hold', protect, holdSeats);
 router.post('/release', protect, releaseSeats);
 
 module.exports = router;
+

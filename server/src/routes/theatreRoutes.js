@@ -24,3 +24,4 @@ router.put('/:id', protect, authorize('ADMIN'), updateTheatre);
 router.delete('/:id', protect, authorize('ADMIN'), deleteTheatre);
 
 module.exports = router;
+

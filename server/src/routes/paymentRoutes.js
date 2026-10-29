@@ -15,3 +15,4 @@ router.post('/process', protect, processPayment);
 router.get('/booking/:bookingId', protect, getPaymentsByBooking);
 
 module.exports = router;
+

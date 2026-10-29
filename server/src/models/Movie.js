@@ -148,3 +148,4 @@ movieSchema.index({ language: 1 });
 const Movie = mongoose.model('Movie', movieSchema);
 
 module.exports = Movie;
+

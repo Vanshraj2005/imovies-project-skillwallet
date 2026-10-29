@@ -24,3 +24,4 @@ router.put('/:id', protect, authorize('ADMIN'), updateShow);
 router.delete('/:id', protect, authorize('ADMIN'), deleteShow);
 
 module.exports = router;
+

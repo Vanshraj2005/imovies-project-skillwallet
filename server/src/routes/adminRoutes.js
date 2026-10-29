@@ -11,3 +11,4 @@ const router = express.Router();
 router.get('/overview', protect, authorize('ADMIN'), getOverview);
 
 module.exports = router;
+

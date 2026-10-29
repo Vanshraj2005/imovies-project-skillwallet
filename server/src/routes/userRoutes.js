@@ -19,3 +19,4 @@ router.put('/password', protect, changePassword);
 router.get('/', protect, authorize('ADMIN'), listUsers);
 
 module.exports = router;
+

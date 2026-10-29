@@ -60,3 +60,4 @@ seatSchema.index(
 const Seat = mongoose.model('Seat', seatSchema);
 
 module.exports = Seat;
+

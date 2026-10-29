@@ -22,3 +22,4 @@ router.post('/refresh', refreshToken);
 router.post('/logout', logout);
 
 module.exports = router;
+
