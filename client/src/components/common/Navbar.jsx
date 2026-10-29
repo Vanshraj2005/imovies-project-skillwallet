@@ -18,6 +18,22 @@ const Navbar = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isNavCollapsed, setIsNavCollapsed] = useState(true);
+  const [activeDropdown, setActiveDropdown] = useState(null); // 'city' | 'role' | 'user' | null
+
+  // Close dropdown on outside click
+  React.useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest('.dropdown')) {
+        setActiveDropdown(null);
+      }
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
+
+  const toggleDropdown = (name) => {
+    setActiveDropdown((prev) => (prev === name ? null : name));
+  };
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -57,20 +73,23 @@ const Navbar = () => {
             <button
               className="btn btn-sm btn-light border d-flex align-items-center gap-2 text-secondary"
               type="button"
-              data-bs-toggle="dropdown"
-              aria-expanded="false"
+              onClick={() => toggleDropdown('city')}
+              aria-expanded={activeDropdown === 'city'}
             >
               <i className="bi bi-geo-alt-fill text-primary" />
               <span className="fw-medium">{currentCity}</span>
               <i className="bi bi-chevron-down small" />
             </button>
-            <ul className="dropdown-menu shadow-sm border">
+            <ul className={`dropdown-menu shadow-sm border ${activeDropdown === 'city' ? 'show' : ''}`}>
               <li className="dropdown-header small text-muted">Select City</li>
               {availableCities.map((city) => (
                 <li key={city}>
                   <button
                     className={`dropdown-item ${city === currentCity ? 'active' : ''}`}
-                    onClick={() => dispatch(setCurrentCity(city))}
+                    onClick={() => {
+                      dispatch(setCurrentCity(city));
+                      setActiveDropdown(null);
+                    }}
                   >
                     {city}
                   </button>
@@ -161,14 +180,14 @@ const Navbar = () => {
                 <button
                   className="btn btn-sm btn-outline-secondary dropdown-toggle d-flex align-items-center gap-1"
                   type="button"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
+                  onClick={() => toggleDropdown('role')}
+                  aria-expanded={activeDropdown === 'role'}
                   title="Switch Demo Persona for evaluation"
                 >
                   <i className="bi bi-person-gear text-primary" />
                   <span className="small d-none d-sm-inline">Role: {role}</span>
                 </button>
-                <ul className="dropdown-menu dropdown-menu-end shadow-sm border">
+                <ul className={`dropdown-menu dropdown-menu-end shadow-sm border ${activeDropdown === 'role' ? 'show' : ''}`}>
                   <li>
                     <h6 className="dropdown-header small text-muted">Simulate User Account</h6>
                   </li>
@@ -177,6 +196,7 @@ const Navbar = () => {
                       className="dropdown-item small d-flex align-items-center gap-2"
                       onClick={() => {
                         dispatch(loginDemoUser());
+                        setActiveDropdown(null);
                         toast.success('Switched to Demo Moviegoer account');
                       }}
                     >
@@ -189,6 +209,7 @@ const Navbar = () => {
                       className="dropdown-item small d-flex align-items-center gap-2"
                       onClick={() => {
                         dispatch(loginDemoAdmin());
+                        setActiveDropdown(null);
                         toast.success('Switched to Demo Cinema Admin account');
                       }}
                     >
@@ -204,8 +225,8 @@ const Navbar = () => {
                   <button
                     className="btn btn-sm btn-light border d-flex align-items-center gap-2"
                     type="button"
-                    data-bs-toggle="dropdown"
-                    aria-expanded="false"
+                    onClick={() => toggleDropdown('user')}
+                    aria-expanded={activeDropdown === 'user'}
                   >
                     <div
                       className="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold"
@@ -218,7 +239,7 @@ const Navbar = () => {
                     </span>
                     <i className="bi bi-chevron-down small text-muted" />
                   </button>
-                  <ul className="dropdown-menu dropdown-menu-end shadow-sm border">
+                  <ul className={`dropdown-menu dropdown-menu-end shadow-sm border ${activeDropdown === 'user' ? 'show' : ''}`}>
                     <li className="px-3 py-1 border-bottom mb-1">
                       <div className="fw-bold small text-dark">{user?.name}</div>
                       <div className="text-muted small" style={{ fontSize: '0.75rem' }}>
@@ -226,19 +247,31 @@ const Navbar = () => {
                       </div>
                     </li>
                     <li>
-                      <Link className="dropdown-item small" to="/dashboard">
+                      <Link
+                        className="dropdown-item small"
+                        to="/dashboard"
+                        onClick={() => setActiveDropdown(null)}
+                      >
                         <i className="bi bi-speedometer2 me-2 text-muted" />
                         Dashboard
                       </Link>
                     </li>
                     <li>
-                      <Link className="dropdown-item small" to="/bookings">
+                      <Link
+                        className="dropdown-item small"
+                        to="/bookings"
+                        onClick={() => setActiveDropdown(null)}
+                      >
                         <i className="bi bi-ticket-perforated me-2 text-muted" />
                         My Bookings
                       </Link>
                     </li>
                     <li>
-                      <Link className="dropdown-item small" to="/profile">
+                      <Link
+                        className="dropdown-item small"
+                        to="/profile"
+                        onClick={() => setActiveDropdown(null)}
+                      >
                         <i className="bi bi-person-circle me-2 text-muted" />
                         Profile Settings
                       </Link>
@@ -249,13 +282,21 @@ const Navbar = () => {
                         <li><hr className="dropdown-divider" /></li>
                         <li className="dropdown-header small text-primary fw-bold">Admin Portal</li>
                         <li>
-                          <Link className="dropdown-item small text-primary fw-medium" to="/admin">
+                          <Link
+                            className="dropdown-item small text-primary fw-medium"
+                            to="/admin"
+                            onClick={() => setActiveDropdown(null)}
+                          >
                             <i className="bi bi-shield-lock me-2" />
                             Admin Console
                           </Link>
                         </li>
                         <li>
-                          <Link className="dropdown-item small" to="/admin/movies">
+                          <Link
+                            className="dropdown-item small"
+                            to="/admin/movies"
+                            onClick={() => setActiveDropdown(null)}
+                          >
                             <i className="bi bi-camera-reels me-2 text-muted" />
                             Manage Movies
                           </Link>
@@ -267,7 +308,10 @@ const Navbar = () => {
                     <li>
                       <button
                         className="dropdown-item small text-danger"
-                        onClick={handleLogout}
+                        onClick={() => {
+                          setActiveDropdown(null);
+                          handleLogout();
+                        }}
                       >
                         <i className="bi bi-box-arrow-right me-2" />
                         Sign Out
@@ -294,3 +338,4 @@ const Navbar = () => {
 };
 
 export default Navbar;
+
