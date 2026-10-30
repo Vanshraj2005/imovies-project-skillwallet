@@ -10,12 +10,14 @@ const {
   updateMovie,
   deleteMovie,
 } = require('../controllers/movieController');
+const { getSmartMatchRecommendations } = require('../controllers/recommendationController');
 const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
 // Public discovery endpoints
 router.get('/', getMovies);
+router.get('/recommendations/smartmatch', getSmartMatchRecommendations);
 router.get('/:id', getMovieById);
 
 // Admin-only management endpoints

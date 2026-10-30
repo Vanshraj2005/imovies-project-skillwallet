@@ -83,7 +83,7 @@ let inMemoryTheatres = [...defaultTheatres];
  */
 const getTheatres = async (req, res) => {
   try {
-    const { city, active } = req.query;
+    const { city, active, wheelchair, assistedListening } = req.query;
     const isDBConnected = Theatre.db?.readyState === 1;
 
     let theatres = [];
@@ -91,6 +91,20 @@ const getTheatres = async (req, res) => {
       const query = {};
       if (city && city !== 'All') query.city = new RegExp(`^${city}$`, 'i');
       if (active !== undefined) query.isActive = active === 'true';
+      if (wheelchair === 'true') {
+        query.$or = [
+          { 'accessibility.wheelchairAccessible': true },
+          { 'accessibility.wheelchairAccess.status': 'VERIFIED' },
+          { 'accessibility.wheelchairAccess.verified': true },
+        ];
+      }
+      if (assistedListening === 'true') {
+        query.$or = [
+          { 'accessibility.assistiveListening': true },
+          { 'accessibility.assistiveListening.status': 'VERIFIED' },
+          { 'accessibility.assistiveListening.verified': true },
+        ];
+      }
       theatres = await Theatre.find(query).sort({ name: 1 });
     } else {
       let filtered = [...inMemoryTheatres];
@@ -99,6 +113,24 @@ const getTheatres = async (req, res) => {
       }
       if (active !== undefined) {
         filtered = filtered.filter((t) => t.isActive === (active === 'true'));
+      }
+      if (wheelchair === 'true') {
+        filtered = filtered.filter(
+          (t) =>
+            t.accessibility?.wheelchairAccessible ||
+            t.accessibility?.wheelchairAccess?.status === 'VERIFIED' ||
+            t.accessibility?.wheelchairAccess?.verified === true ||
+            t.accessibility?.wheelchairAccess === 'VERIFIED'
+        );
+      }
+      if (assistedListening === 'true') {
+        filtered = filtered.filter(
+          (t) =>
+            t.accessibility?.assistiveListening ||
+            t.accessibility?.assistiveListening?.status === 'VERIFIED' ||
+            t.accessibility?.assistiveListening?.verified === true ||
+            t.accessibility?.assistiveListening === 'VERIFIED'
+        );
       }
       theatres = filtered;
     }
@@ -149,6 +181,24 @@ const createTheatre = async (req, res) => {
       return sendError(res, 'Name, city, and address are required', 400);
     }
 
+    const normAccess = { ...(accessibility || {}) };
+    const accessKeys = [
+      'wheelchairAccess',
+      'assistiveListening',
+      'elevatorAccess',
+      'accessibleParking',
+      'accessibleRestrooms',
+      'signLanguageSupport',
+    ];
+    accessKeys.forEach((k) => {
+      if (typeof normAccess[k] === 'string') {
+        normAccess[k] = {
+          status: normAccess[k],
+          verified: normAccess[k] === 'VERIFIED',
+        };
+      }
+    });
+
     const isDBConnected = Theatre.db?.readyState === 1;
     let created;
 
@@ -162,7 +212,7 @@ const createTheatre = async (req, res) => {
           { screenNumber: 1, name: 'Audi 1', format: 'Standard 2D', totalCapacity: 120 },
         ],
         facilities: facilities || ['Dolby Atmos', 'Recliner Seats'],
-        accessibility: accessibility || {},
+        accessibility: normAccess,
       });
     } else {
       created = {
@@ -176,7 +226,7 @@ const createTheatre = async (req, res) => {
           { screenNumber: 1, name: 'Audi 1', format: 'Standard 2D', totalCapacity: 120 },
         ],
         facilities: facilities || ['Dolby Atmos', 'Recliner Seats'],
-        accessibility: accessibility || { wheelchairAccessible: true },
+        accessibility: normAccess,
         isActive: true,
       };
       inMemoryTheatres.push(created);

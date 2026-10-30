@@ -17,6 +17,8 @@ import ShowsPage from './pages/ShowsPage';
 import SeatSelectionPage from './pages/SeatSelectionPage';
 import BookingSummaryPage from './pages/BookingSummaryPage';
 import BookingConfirmationPage from './pages/BookingConfirmationPage';
+import GroupMovieNightPage from './pages/GroupMovieNightPage';
+import FoodMenuPage from './pages/FoodMenuPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import UserProfilePage from './pages/UserProfilePage';
@@ -74,6 +76,8 @@ function App() {
           <Route path="seats" element={<SeatSelectionPage />} />
           <Route path="checkout" element={<BookingSummaryPage />} />
           <Route path="confirmation" element={<BookingConfirmationPage />} />
+          <Route path="food" element={<FoodMenuPage />} />
+          <Route path="group-plans" element={<GroupMovieNightPage />} />
 
           {/* Protected Customer Routes */}
           <Route

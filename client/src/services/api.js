@@ -106,8 +106,35 @@ export const bookingsApi = {
 // Admin Operations Endpoints
 export const adminApi = {
   getOverview: () => api.get('/admin/overview'),
+  getAnalytics: (params = {}) => api.get('/admin/analytics', { params }),
   getBookings: (params = {}) => api.get('/bookings/admin/all', { params }),
   getUsers: (params = {}) => api.get('/users', { params }),
+};
+
+// SmartMatch Recommendations Endpoints
+export const recommendationsApi = {
+  getSmartMatch: (params = {}) => api.get('/movies/recommendations/smartmatch', { params }),
+  updatePreferences: (data) => api.put('/users/preferences', data),
+};
+
+// Group Movie Night Planning Endpoints
+export const groupPlansApi = {
+  create: (data) => api.post('/group-plans', data),
+  getAll: () => api.get('/group-plans'),
+  getById: (id) => api.get(`/group-plans/${id}`),
+  getByInvite: (token) => api.get(`/group-plans/invite/${token}`),
+  join: (token) => api.post(`/group-plans/invite/${token}/join`),
+  vote: (id, data) => api.post(`/group-plans/${id}/vote`, data),
+  finalize: (id, data) => api.post(`/group-plans/${id}/finalize`, data),
+};
+
+// Food & Concessions Pre-Ordering Endpoints
+export const foodApi = {
+  getItems: (params = {}) => api.get('/food/items', { params }),
+  createOrder: (data) => api.post('/food/orders', data),
+  getOrders: () => api.get('/food/orders'),
+  updateOrderStatus: (id, data) => api.patch(`/food/orders/${id}/status`, data),
+  createItem: (data) => api.post('/food/items', data),
 };
 
 // Payment Endpoints

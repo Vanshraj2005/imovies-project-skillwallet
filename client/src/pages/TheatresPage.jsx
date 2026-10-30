@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { theatresApi } from '../services/api';
 import Badge from '../components/common/Badge';
 
 const mockTheatres = [
@@ -45,8 +46,28 @@ const mockTheatres = [
 const TheatresPage = () => {
   const { currentCity, availableCities } = useSelector((state) => state.ui);
   const [selectedCity, setSelectedCity] = useState('All');
+  const [theatres, setTheatres] = useState(mockTheatres);
+  const [loading, setLoading] = useState(false);
 
-  const filteredTheatres = mockTheatres.filter((t) => {
+  useEffect(() => {
+    setLoading(true);
+    const params = selectedCity !== 'All' ? { city: selectedCity } : {};
+    theatresApi
+      .getAll(params)
+      .then((res) => {
+        if (res.data && res.data.length > 0) {
+          setTheatres(res.data);
+        } else {
+          setTheatres(mockTheatres);
+        }
+      })
+      .catch(() => {
+        setTheatres(mockTheatres);
+      })
+      .finally(() => setLoading(false));
+  }, [selectedCity]);
+
+  const filteredTheatres = theatres.filter((t) => {
     if (selectedCity === 'All') return true;
     return t.city === selectedCity;
   });
@@ -86,54 +107,98 @@ const TheatresPage = () => {
 
       {/* Theatres List */}
       <div className="row g-4">
-        {filteredTheatres.map((theatre) => (
-          <div className="col-lg-6" key={theatre.id}>
-            <div className="im-card p-4 h-100 d-flex flex-column">
-              <div className="d-flex align-items-start justify-content-between mb-2">
-                <div>
-                  <h5 className="fw-bold text-dark mb-1">{theatre.name}</h5>
-                  <p className="text-secondary small mb-2">
-                    <i className="bi bi-geo-alt text-primary me-1" />
-                    {theatre.address}
-                  </p>
+        {filteredTheatres.map((theatre) => {
+          const tId = theatre._id || theatre.id;
+          const tAddress = typeof theatre.address === 'object' ? `${theatre.address.street || ''}, ${theatre.address.city || ''}` : theatre.address;
+          const tScreens = theatre.screensCount || (theatre.screens ? theatre.screens.length : 8);
+          const tAmenities = theatre.amenities || theatre.facilities || ['Dolby Atmos', 'Recliner Seats', 'Wheelchair Accessible'];
+          const access = theatre.accessibility;
+
+          return (
+            <div className="col-lg-6" key={tId}>
+              <div className="im-card p-4 h-100 d-flex flex-column">
+                <div className="d-flex align-items-start justify-content-between mb-2">
+                  <div>
+                    <h5 className="fw-bold text-dark mb-1">{theatre.name}</h5>
+                    <p className="text-secondary small mb-2">
+                      <i className="bi bi-geo-alt text-primary me-1" />
+                      {tAddress}
+                    </p>
+                  </div>
+                  <span className="badge bg-light text-dark border">
+                    {tScreens} Screens
+                  </span>
                 </div>
-                <span className="badge bg-light text-dark border">
-                  {theatre.screensCount} Screens
-                </span>
-              </div>
 
-              {/* Amenities */}
-              <div className="d-flex flex-wrap gap-1 mb-4">
-                {theatre.amenities.map((amenity, idx) => (
-                  <Badge key={idx} variant="neutral">
-                    {amenity.includes('Wheelchair') ? (
-                      <i className="bi bi-universal-access me-1 text-success" />
-                    ) : (
+                {/* Structured Accessibility Verification Statuses */}
+                <div className="d-flex flex-wrap gap-1 mb-2">
+                  {access?.wheelchairAccess && (
+                    <span
+                      className={`badge ${
+                        access.wheelchairAccess === 'VERIFIED'
+                          ? 'bg-success-subtle text-success border border-success-subtle'
+                          : 'bg-light text-secondary border'
+                      }`}
+                      title={`Wheelchair Access: ${access.wheelchairAccess}`}
+                    >
+                      <i className="bi bi-person-wheelchair me-1" />
+                      Wheelchair: {access.wheelchairAccess}
+                    </span>
+                  )}
+                  {access?.assistiveListening && (
+                    <span
+                      className={`badge ${
+                        access.assistiveListening === 'VERIFIED'
+                          ? 'bg-primary-subtle text-primary border border-primary-subtle'
+                          : 'bg-light text-secondary border'
+                      }`}
+                      title={`Assistive Listening: ${access.assistiveListening}`}
+                    >
+                      <i className="bi bi-earbuds me-1" />
+                      Hearing Loop: {access.assistiveListening}
+                    </span>
+                  )}
+                  {access?.elevatorAccess && access.elevatorAccess !== 'UNKNOWN' && (
+                    <span className="badge bg-light text-secondary border">
+                      Elevator: {access.elevatorAccess}
+                    </span>
+                  )}
+                  {access?.accessibleParking && access.accessibleParking !== 'UNKNOWN' && (
+                    <span className="badge bg-light text-secondary border">
+                      Parking: {access.accessibleParking}
+                    </span>
+                  )}
+                </div>
+
+                {/* Amenities */}
+                <div className="d-flex flex-wrap gap-1 mb-4">
+                  {tAmenities.map((amenity, idx) => (
+                    <Badge key={idx} variant="neutral">
                       <i className="bi bi-check2 text-primary me-1" />
-                    )}
-                    {amenity}
-                  </Badge>
-                ))}
-              </div>
+                      {amenity}
+                    </Badge>
+                  ))}
+                </div>
 
-              {/* Card Footer Actions */}
-              <div className="d-flex align-items-center justify-content-between mt-auto pt-3 border-top">
-                <span className="small text-muted">
-                  <i className="bi bi-telephone me-1" />
-                  {theatre.phone}
-                </span>
+                {/* Card Footer Actions */}
+                <div className="d-flex align-items-center justify-content-between mt-auto pt-3 border-top">
+                  <span className="small text-muted">
+                    <i className="bi bi-telephone me-1" />
+                    {theatre.phone || '+1 (800) 555-IMOV'}
+                  </span>
 
-                <Link
-                  to={`/shows?theatreId=${theatre.id}`}
-                  className="btn btn-sm btn-primary fw-medium px-3"
-                >
-                  <i className="bi bi-calendar-event me-1" />
-                  View Showtimes
-                </Link>
+                  <Link
+                    to={`/shows?theatreId=${tId}`}
+                    className="btn btn-sm btn-primary fw-medium px-3"
+                  >
+                    <i className="bi bi-calendar-event me-1" />
+                    View Showtimes
+                  </Link>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

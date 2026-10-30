@@ -43,6 +43,20 @@ const initializeSocket = (httpServer) => {
   io.on('connection', (socket) => {
     logger.info(`Real-time client connected: ${socket.id}`);
 
+    // Automatically join user room if authenticated
+    if (socket.user) {
+      const uId = socket.user.id || socket.user._id;
+      socket.join(`user_${uId}`);
+      logger.debug(`Socket ${socket.id} joined personal notification room: user_${uId}`);
+    }
+
+    socket.on('join_user', (userId) => {
+      if (userId) {
+        socket.join(`user_${userId}`);
+        logger.debug(`Socket ${socket.id} joined personal room: user_${userId}`);
+      }
+    });
+
     // Join showtime-specific room for seat updates
     socket.on('join_show', (showId) => {
       if (showId) {
@@ -133,6 +147,13 @@ const broadcastSeatUpdate = (showId, seatData) => {
   }
 };
 
+// Broadcast user-specific real-time alert (e.g. food ready, group invites)
+const broadcastUserNotification = (userId, notificationData) => {
+  if (io && userId) {
+    io.to(`user_${userId}`).emit('notification', notificationData);
+  }
+};
+
 module.exports = {
   initializeSocket,
   getIO,
@@ -140,4 +161,5 @@ module.exports = {
   broadcastSeatReleased,
   broadcastSeatBooked,
   broadcastSeatUpdate,
+  broadcastUserNotification,
 };

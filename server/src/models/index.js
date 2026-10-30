@@ -10,6 +10,9 @@ const SeatLock = require('./SeatLock');
 const Booking = require('./Booking');
 const Payment = require('./Payment');
 const Notification = require('./Notification');
+const FoodItem = require('./FoodItem');
+const FoodOrder = require('./FoodOrder');
+const GroupPlan = require('./GroupPlan');
 
 module.exports = {
   User,
@@ -21,5 +24,8 @@ module.exports = {
   Booking,
   Payment,
   Notification,
+  FoodItem,
+  FoodOrder,
+  GroupPlan,
 };
 

@@ -91,6 +91,21 @@ const showSchema = new mongoose.Schema(
       default: 120,
       min: [0, 'Available seats count cannot be negative'],
     },
+    accessibility: {
+      closedCaptioning: {
+        status: { type: String, enum: ['VERIFIED', 'UNVERIFIED', 'NOT_AVAILABLE', 'UNKNOWN'], default: 'VERIFIED' },
+        available: { type: Boolean, default: true },
+      },
+      audioDescription: {
+        status: { type: String, enum: ['VERIFIED', 'UNVERIFIED', 'NOT_AVAILABLE', 'UNKNOWN'], default: 'VERIFIED' },
+        available: { type: Boolean, default: true },
+      },
+      signLanguage: {
+        status: { type: String, enum: ['VERIFIED', 'UNVERIFIED', 'NOT_AVAILABLE', 'UNKNOWN'], default: 'UNKNOWN' },
+        available: { type: Boolean, default: false },
+      },
+      wheelchairAccessible: { type: Boolean, default: true },
+    },
   },
   {
     timestamps: true,

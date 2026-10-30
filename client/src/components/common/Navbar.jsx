@@ -171,6 +171,29 @@ const Navbar = () => {
                   Showtimes
                 </NavLink>
               </li>
+              <li className="nav-item">
+                <NavLink
+                  to="/food"
+                  className={({ isActive }) =>
+                    `nav-link fw-medium ${isActive ? 'text-primary' : 'text-secondary'}`
+                  }
+                  onClick={() => setIsNavCollapsed(true)}
+                >
+                  Concessions
+                </NavLink>
+              </li>
+              <li className="nav-item">
+                <NavLink
+                  to="/group-plans"
+                  className={({ isActive }) =>
+                    `nav-link fw-medium ${isActive ? 'text-primary' : 'text-secondary'}`
+                  }
+                  onClick={() => setIsNavCollapsed(true)}
+                >
+                  <i className="bi bi-people me-1 text-primary" />
+                  Movie Nights
+                </NavLink>
+              </li>
             </ul>
 
             {/* Auth Actions & Demo Persona Switcher */}
@@ -264,6 +287,26 @@ const Navbar = () => {
                       >
                         <i className="bi bi-ticket-perforated me-2 text-muted" />
                         My Bookings
+                      </Link>
+                    </li>
+                    <li>
+                      <Link
+                        className="dropdown-item small"
+                        to="/group-plans"
+                        onClick={() => setActiveDropdown(null)}
+                      >
+                        <i className="bi bi-people me-2 text-muted" />
+                        Group Movie Nights
+                      </Link>
+                    </li>
+                    <li>
+                      <Link
+                        className="dropdown-item small"
+                        to="/food"
+                        onClick={() => setActiveDropdown(null)}
+                      >
+                        <i className="bi bi-cup-straw me-2 text-muted" />
+                        Concessions & Snacks
                       </Link>
                     </li>
                     <li>

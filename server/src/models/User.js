@@ -66,6 +66,22 @@ const userSchema = new mongoose.Schema(
           ref: 'Theatre',
         },
       ],
+      preferredLocations: {
+        type: [String],
+        default: ['New York'],
+      },
+      approximateBudget: {
+        type: Number,
+        default: 25,
+      },
+      preferredShowTimes: {
+        type: [String],
+        default: ['EVENING', 'NIGHT'],
+      },
+      preferredFormats: {
+        type: [String],
+        default: ['Standard 2D', 'IMAX 2D'],
+      },
     },
     accessibility: {
       wheelchairSeatingPreferred: {

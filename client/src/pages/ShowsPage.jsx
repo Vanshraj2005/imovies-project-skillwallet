@@ -61,6 +61,10 @@ const ShowsPage = () => {
     };
     if (selectedMovieId) queryParams.movieId = selectedMovieId;
     if (selectedTheatreId) queryParams.theatreId = selectedTheatreId;
+    if (searchParams.get('wheelchair') === 'true') queryParams.wheelchair = 'true';
+    if (searchParams.get('closedCaptions') === 'true') queryParams.closedCaptions = 'true';
+    if (searchParams.get('audioDescription') === 'true') queryParams.audioDescription = 'true';
+    if (searchParams.get('assistedListening') === 'true') queryParams.assistedListening = 'true';
 
     showsApi
       .getAll(queryParams)
@@ -73,8 +77,12 @@ const ShowsPage = () => {
     if (selectedMovieId) newParams.set('movieId', selectedMovieId);
     if (selectedTheatreId) newParams.set('theatreId', selectedTheatreId);
     if (selectedDate !== dates[0].iso) newParams.set('date', selectedDate);
+    if (searchParams.get('wheelchair') === 'true') newParams.set('wheelchair', 'true');
+    if (searchParams.get('closedCaptions') === 'true') newParams.set('closedCaptions', 'true');
+    if (searchParams.get('audioDescription') === 'true') newParams.set('audioDescription', 'true');
+    if (searchParams.get('assistedListening') === 'true') newParams.set('assistedListening', 'true');
     setSearchParams(newParams, { replace: true });
-  }, [selectedMovieId, selectedTheatreId, selectedDate, setSearchParams]);
+  }, [selectedMovieId, selectedTheatreId, selectedDate, setSearchParams, searchParams]);
 
   const activeMovie = movies.find(
     (m) => String(m._id || m.id) === String(selectedMovieId)
@@ -195,7 +203,7 @@ const ShowsPage = () => {
       </div>
 
       {/* Date Selector Pills */}
-      <div className="d-flex gap-2 overflow-auto pb-2 mb-4">
+      <div className="d-flex gap-2 overflow-auto pb-2 mb-3">
         {dates.map((d) => (
           <button
             key={d.iso}
@@ -212,6 +220,57 @@ const ShowsPage = () => {
             <span style={{ fontSize: '0.75rem' }}>{d.dateFormatted}</span>
           </button>
         ))}
+      </div>
+
+      {/* Accessibility Filters Bar */}
+      <div className="bg-white border rounded p-2 mb-4 d-flex flex-wrap align-items-center justify-content-between gap-2 shadow-sm">
+        <div className="d-flex flex-wrap align-items-center gap-1.5">
+          <span className="small text-muted fw-semibold me-1">
+            <i className="bi bi-universal-access me-1 text-primary" /> Accessibility:
+          </span>
+          {[
+            { key: 'wheelchair', label: '♿ Wheelchair Step-Free' },
+            { key: 'closedCaptions', label: '🗪 Closed Captions' },
+            { key: 'audioDescription', label: '🎧 Audio Description' },
+            { key: 'assistedListening', label: '🦻 Assisted Listening' },
+          ].map(({ key, label }) => {
+            const isActive = searchParams.get(key) === 'true';
+            return (
+              <button
+                key={key}
+                type="button"
+                className={`btn btn-xs rounded-pill ${
+                  isActive ? 'btn-primary' : 'btn-light border text-secondary'
+                }`}
+                onClick={() => {
+                  const newP = new URLSearchParams(searchParams);
+                  if (isActive) newP.delete(key);
+                  else newP.set(key, 'true');
+                  setSearchParams(newP);
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        {Array.from(searchParams.keys()).some((k) =>
+          ['wheelchair', 'closedCaptions', 'audioDescription', 'assistedListening'].includes(k)
+        ) && (
+          <button
+            type="button"
+            className="btn btn-xs btn-link text-decoration-none text-muted"
+            onClick={() => {
+              const newP = new URLSearchParams(searchParams);
+              ['wheelchair', 'closedCaptions', 'audioDescription', 'assistedListening'].forEach((k) =>
+                newP.delete(k)
+              );
+              setSearchParams(newP);
+            }}
+          >
+            Clear accessibility filters
+          </button>
+        )}
       </div>
 
       {error && <ErrorAlert message={error} className="mb-4" />}
@@ -306,6 +365,23 @@ const ShowsPage = () => {
                         >
                           ${minPrice.toFixed(2)}
                         </span>
+                        <div className="d-flex gap-1 mt-1">
+                          {show.accessibility?.wheelchairAccessible && (
+                            <span className="badge bg-light text-primary border" style={{ fontSize: '0.6rem' }} title="Wheelchair Accessible">
+                              ♿
+                            </span>
+                          )}
+                          {show.accessibility?.closedCaptioning && (
+                            <span className="badge bg-light text-secondary border" style={{ fontSize: '0.6rem' }} title="Closed Captioning">
+                              CC
+                            </span>
+                          )}
+                          {show.accessibility?.audioDescription && (
+                            <span className="badge bg-light text-secondary border" style={{ fontSize: '0.6rem' }} title="Audio Description">
+                              AD
+                            </span>
+                          )}
+                        </div>
                       </button>
                     );
                   })}

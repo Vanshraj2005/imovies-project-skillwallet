@@ -77,10 +77,34 @@ const theatreSchema = new mongoose.Schema(
     },
     accessibility: {
       wheelchairAccessible: { type: Boolean, default: true },
-      assistiveListening: { type: Boolean, default: true },
-      elevatorAccess: { type: Boolean, default: true },
-      accessibleParking: { type: Boolean, default: true },
-      accessibleRestrooms: { type: Boolean, default: true },
+      wheelchairAccess: {
+        status: { type: String, enum: ['VERIFIED', 'UNVERIFIED', 'NOT_AVAILABLE', 'UNKNOWN'], default: 'VERIFIED' },
+        verified: { type: Boolean, default: true },
+        notes: { type: String, default: 'Step-free entrance and designated companion seating' },
+      },
+      assistiveListening: {
+        status: { type: String, enum: ['VERIFIED', 'UNVERIFIED', 'NOT_AVAILABLE', 'UNKNOWN'], default: 'VERIFIED' },
+        verified: { type: Boolean, default: true },
+        notes: { type: String, default: 'Inductive loop and RF headset units available' },
+      },
+      elevatorAccess: {
+        status: { type: String, enum: ['VERIFIED', 'UNVERIFIED', 'NOT_AVAILABLE', 'UNKNOWN'], default: 'VERIFIED' },
+        verified: { type: Boolean, default: true },
+        notes: { type: String, default: 'Wide elevators to all screen levels' },
+      },
+      accessibleParking: {
+        status: { type: String, enum: ['VERIFIED', 'UNVERIFIED', 'NOT_AVAILABLE', 'UNKNOWN'], default: 'VERIFIED' },
+        verified: { type: Boolean, default: true },
+      },
+      accessibleRestrooms: {
+        status: { type: String, enum: ['VERIFIED', 'UNVERIFIED', 'NOT_AVAILABLE', 'UNKNOWN'], default: 'VERIFIED' },
+        verified: { type: Boolean, default: true },
+      },
+      signLanguageSupport: {
+        status: { type: String, enum: ['VERIFIED', 'UNVERIFIED', 'NOT_AVAILABLE', 'UNKNOWN'], default: 'UNKNOWN' },
+        verified: { type: Boolean, default: false },
+        notes: { type: String, default: 'Select screenings support on-screen sign language interpretation' },
+      },
       details: {
         type: String,
         default: 'Full step-free entrance, dedicated companion spaces, and hearing loops.',

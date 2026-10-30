@@ -76,7 +76,7 @@ let inMemoryShows = [...defaultShows];
  */
 const getShows = async (req, res) => {
   try {
-    const { movieId, theatreId, city, date, futureOnly } = req.query;
+    const { movieId, theatreId, city, date, futureOnly, closedCaptions, audioDescription, wheelchairOnly } = req.query;
     const isDBConnected = Show.db?.readyState === 1;
 
     let shows = [];
@@ -86,6 +86,23 @@ const getShows = async (req, res) => {
       if (theatreId && theatreId.match(/^[0-9a-fA-F]{24}$/)) query.theatre = theatreId;
       if (futureOnly === 'true') {
         query.startTime = { $gte: new Date() };
+      }
+      if (closedCaptions === 'true') {
+        query.$or = [
+          { 'accessibility.closedCaptioning.available': true },
+          { 'accessibility.closedCaptioning': true },
+          { 'accessibility.closedCaptioning.status': 'VERIFIED' },
+        ];
+      }
+      if (audioDescription === 'true') {
+        query.$or = [
+          { 'accessibility.audioDescription.available': true },
+          { 'accessibility.audioDescription': true },
+          { 'accessibility.audioDescription.status': 'VERIFIED' },
+        ];
+      }
+      if (wheelchairOnly === 'true') {
+        query['accessibility.wheelchairAccessible'] = true;
       }
       if (date) {
         const startOfDay = new Date(date);
@@ -125,6 +142,20 @@ const getShows = async (req, res) => {
         filtered = filtered.filter((s) => {
           const tCity = s.theatre?.city;
           return tCity && tCity.toLowerCase() === cityLower;
+        });
+      }
+      if (closedCaptions === 'true') {
+        filtered = filtered.filter((s) => {
+          if (!s.accessibility) return false;
+          if (typeof s.accessibility.closedCaptioning === 'boolean') return s.accessibility.closedCaptioning;
+          return s.accessibility.closedCaptioning?.available === true || s.accessibility.closedCaptioning?.status === 'VERIFIED';
+        });
+      }
+      if (audioDescription === 'true') {
+        filtered = filtered.filter((s) => {
+          if (!s.accessibility) return false;
+          if (typeof s.accessibility.audioDescription === 'boolean') return s.accessibility.audioDescription;
+          return s.accessibility.audioDescription?.available === true || s.accessibility.audioDescription?.status === 'VERIFIED';
         });
       }
       if (date) {
@@ -193,6 +224,7 @@ const createShow = async (req, res) => {
       endTime,
       pricing,
       totalSeats,
+      accessibility,
     } = req.body;
 
     if (!movie || !theatre || !startTime || !endTime || !pricing) {
@@ -255,6 +287,28 @@ const createShow = async (req, res) => {
       }
     }
 
+    const normAccessibility = {
+      closedCaptioning: {
+        status: typeof accessibility?.closedCaptioning === 'boolean'
+          ? (accessibility.closedCaptioning ? 'VERIFIED' : 'NOT_AVAILABLE')
+          : accessibility?.closedCaptioning?.status || 'VERIFIED',
+        available: typeof accessibility?.closedCaptioning === 'boolean'
+          ? accessibility.closedCaptioning
+          : Boolean(accessibility?.closedCaptioning?.available !== false),
+      },
+      audioDescription: {
+        status: typeof accessibility?.audioDescription === 'boolean'
+          ? (accessibility.audioDescription ? 'VERIFIED' : 'NOT_AVAILABLE')
+          : accessibility?.audioDescription?.status || 'VERIFIED',
+        available: typeof accessibility?.audioDescription === 'boolean'
+          ? accessibility.audioDescription
+          : Boolean(accessibility?.audioDescription?.available !== false),
+      },
+      wheelchairAccessible: typeof accessibility?.wheelchairAccessible === 'boolean'
+        ? accessibility.wheelchairAccessible
+        : true,
+    };
+
     let created;
     if (isDBConnected) {
       created = await Show.create({
@@ -268,6 +322,7 @@ const createShow = async (req, res) => {
         pricing: Array.isArray(pricing) ? pricing : [{ tier: 'Standard', price: 12.5 }],
         totalSeats: Number(totalSeats) || 120,
         availableSeatsCount: Number(totalSeats) || 120,
+        accessibility: normAccessibility,
       });
     } else {
       created = {
@@ -284,6 +339,7 @@ const createShow = async (req, res) => {
         status: 'SCHEDULED',
         totalSeats: Number(totalSeats) || 120,
         availableSeatsCount: Number(totalSeats) || 120,
+        accessibility: normAccessibility,
       };
       inMemoryShows.push(created);
     }
