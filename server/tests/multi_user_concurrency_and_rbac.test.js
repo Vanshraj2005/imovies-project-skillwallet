@@ -487,3 +487,4 @@ describe('IMovies — Multi-User Authentication, RBAC and Show-Specific Seat Con
     });
   });
 });
+
