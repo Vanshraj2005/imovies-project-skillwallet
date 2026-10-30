@@ -8,6 +8,7 @@ const {
   getUserBookings,
   getBookingById,
   cancelBooking,
+  checkInBooking,
   getAllBookingsAdmin,
 } = require('../controllers/bookingController');
 const { protect, authorize } = require('../middleware/auth');
@@ -17,6 +18,7 @@ const router = express.Router();
 // Authenticated Customer Endpoints
 router.post('/', protect, createBooking);
 router.get('/', protect, getUserBookings);
+router.post('/check-in', protect, checkInBooking);
 router.get('/admin/all', protect, authorize('ADMIN'), getAllBookingsAdmin);
 router.get('/:id', protect, getBookingById);
 router.post('/:id/cancel', protect, cancelBooking);

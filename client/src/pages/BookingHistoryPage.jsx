@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { bookingsApi, notificationsApi } from '../services/api';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
-import Badge from '../components/common/Badge';
 import EmptyState from '../components/common/EmptyState';
 import ErrorAlert from '../components/common/ErrorAlert';
 import { toast } from 'react-toastify';
@@ -264,20 +263,39 @@ const BookingHistoryPage = () => {
                     ? booking.seats.map((s) => (typeof s === 'object' ? s.seatNumber : s)).join(', ')
                     : booking.seats || 'N/A';
                   const total = booking.pricing?.totalAmount ?? booking.total ?? 0;
-                  const isCancelled = booking.bookingStatus === 'CANCELLED';
+                  const isCancelled = booking.bookingStatus === 'CANCELLED' || booking.cancellation?.isCancelled;
+                  const isCheckedIn = booking.bookingStatus === 'CHECKED_IN' || booking.checkIn?.isCheckedIn;
 
                   return (
                     <div className="col-12" key={booking._id || booking.id || ref}>
                       <div className="bg-white border rounded p-4 shadow-sm">
                         <div className="d-flex flex-column flex-md-row justify-content-between align-items-start gap-3">
                           <div className="flex-grow-1">
-                            <div className="d-flex align-items-center gap-2 mb-2">
+                            <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
                               <span className="badge bg-light text-primary border font-monospace fw-bold">
                                 {ref}
                               </span>
-                              <Badge variant={isCancelled ? 'neutral' : 'success'}>
-                                {isCancelled ? 'Cancelled & Refunded' : 'Confirmed Admission'}
-                              </Badge>
+
+                              {/* Separate Status Badges */}
+                              {isCancelled ? (
+                                <span className="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                  Cancelled & Refunded
+                                </span>
+                              ) : isCheckedIn ? (
+                                <span className="badge bg-success-subtle text-success border border-success-subtle">
+                                  <i className="bi bi-check2-circle me-1" />
+                                  Checked In
+                                </span>
+                              ) : (
+                                <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                  Confirmed Admission
+                                </span>
+                              )}
+
+                              <span className="badge bg-light text-dark border">
+                                Payment: {booking.paymentStatus || 'PAID'}
+                              </span>
+
                               <span className="text-muted small">
                                 {new Date(booking.createdAt || Date.now()).toLocaleDateString()}
                               </span>
@@ -302,16 +320,18 @@ const BookingHistoryPage = () => {
                           </div>
 
                           <div className="d-flex flex-column flex-sm-row gap-2 align-self-stretch align-self-md-auto">
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-outline-primary d-flex align-items-center justify-content-center gap-1"
-                              onClick={() => setSelectedTicket(booking)}
-                            >
-                              <i className="bi bi-qr-code" />
-                              View E-Ticket
-                            </button>
+                            {!isCancelled && (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-primary d-flex align-items-center justify-content-center gap-1"
+                                onClick={() => setSelectedTicket(booking)}
+                              >
+                                <i className="bi bi-qr-code" />
+                                View E-Ticket
+                              </button>
+                            )}
 
-                            {activeTab === 'upcoming' && !isCancelled && (
+                            {activeTab === 'upcoming' && !isCancelled && !isCheckedIn && (
                               <button
                                 type="button"
                                 className="btn btn-sm btn-light border text-danger d-flex align-items-center justify-content-center gap-1"
@@ -345,9 +365,33 @@ const BookingHistoryPage = () => {
         >
           <div className="text-center p-3 bg-light border rounded mb-3">
             <div className="bg-white p-3 rounded border d-inline-block shadow-sm mb-3">
-              <i className="bi bi-qr-code text-dark display-1 d-block" />
-              <span className="small text-muted font-monospace d-block mt-1">
-                {selectedTicket.checkIn?.qrCodeReference || `QR-${selectedTicket.bookingReference}`}
+              {/* Clean SVG QR Code */}
+              <svg
+                width="120"
+                height="120"
+                viewBox="0 0 120 120"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <rect width="120" height="120" fill="white" />
+                <rect x="10" y="10" width="30" height="30" fill="#0f172a" />
+                <rect x="15" y="15" width="20" height="20" fill="white" />
+                <rect x="20" y="20" width="10" height="10" fill="#0f172a" />
+                <rect x="80" y="10" width="30" height="30" fill="#0f172a" />
+                <rect x="85" y="15" width="20" height="20" fill="white" />
+                <rect x="90" y="20" width="10" height="10" fill="#0f172a" />
+                <rect x="10" y="80" width="30" height="30" fill="#0f172a" />
+                <rect x="15" y="85" width="20" height="20" fill="white" />
+                <rect x="20" y="90" width="10" height="10" fill="#0f172a" />
+                <rect x="50" y="20" width="15" height="10" fill="#0f172a" />
+                <rect x="50" y="50" width="20" height="20" fill="#0f172a" />
+                <rect x="25" y="55" width="15" height="10" fill="#0f172a" />
+                <rect x="80" y="55" width="10" height="25" fill="#0f172a" />
+                <rect x="50" y="85" width="25" height="15" fill="#0f172a" />
+                <rect x="95" y="95" width="15" height="15" fill="#0f172a" />
+              </svg>
+              <span className="small text-muted font-monospace d-block mt-2">
+                {selectedTicket.checkIn?.qrCodeReference || `IMOVIES-TICKET-${selectedTicket.bookingReference}`}
               </span>
             </div>
             <h5 className="fw-bold text-dark mb-1">
@@ -390,9 +434,11 @@ const BookingHistoryPage = () => {
               </div>
             </div>
 
-            <div className="small text-success mt-2">
-              <i className="bi bi-check-circle-fill me-1" />
-              Contactless gate entry confirmed • Show QR at cinema scanner
+            <div className={`small ${selectedTicket.checkIn?.isCheckedIn ? 'text-success' : 'text-primary'} mt-2`}>
+              <i className="bi bi-shield-check me-1" />
+              {selectedTicket.checkIn?.isCheckedIn
+                ? `Admitted at ${new Date(selectedTicket.checkIn.checkedInAt).toLocaleTimeString()}`
+                : 'Admission Pass Confirmed • Present at cinema gate scanner'}
             </div>
           </div>
         </Modal>
@@ -413,7 +459,7 @@ const BookingHistoryPage = () => {
           <strong>"{cancelModalBooking?.bookingReference}"</strong>?
         </p>
         <div className="p-3 bg-light border rounded small mb-2 text-muted">
-          Your seats will be released back to the general inventory and a full refund will be processed to your original payment method.
+          Your seats will be immediately released back to general availability and a full refund will be processed to your original payment method.
         </div>
       </Modal>
     </div>

@@ -1,9 +1,11 @@
 /**
  * Socket.IO Real-time Communication Manager
- * Prepares real-time foundation for seat hold locks, live occupancy, and booking updates.
+ * Manages room subscriptions, seat hold notifications, releases, and bookings across clients.
  */
 const { Server } = require('socket.io');
+const jwt = require('jsonwebtoken');
 const corsOptions = require('../config/corsOptions');
+const config = require('../config/env');
 const { logger } = require('../utils/logger');
 
 let io = null;
@@ -15,22 +17,49 @@ const initializeSocket = (httpServer) => {
     pingInterval: 25000,
   });
 
+  // Optional socket authentication middleware
+  io.use((socket, next) => {
+    try {
+      const token =
+        socket.handshake.auth?.token ||
+        socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, '') ||
+        socket.handshake.query?.token;
+
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, config.jwt.secret);
+          socket.user = decoded;
+          logger.debug(`Socket ${socket.id} authenticated for user ${decoded.id || decoded._id}`);
+        } catch (jwtErr) {
+          logger.debug(`Socket ${socket.id} connected with unverified/expired token: ${jwtErr.message}`);
+        }
+      }
+      return next();
+    } catch (err) {
+      return next();
+    }
+  });
+
   io.on('connection', (socket) => {
     logger.info(`Real-time client connected: ${socket.id}`);
 
     // Join showtime-specific room for seat updates
     socket.on('join_show', (showId) => {
       if (showId) {
-        socket.join(`show_${showId}`);
-        logger.debug(`Socket ${socket.id} joined show room: show_${showId}`);
+        const roomName = `show_${showId}`;
+        socket.join(roomName);
+        logger.debug(`Socket ${socket.id} joined show room: ${roomName}`);
+        socket.emit('joined_show', { showId, room: roomName });
       }
     });
 
     // Leave showtime room
     socket.on('leave_show', (showId) => {
       if (showId) {
-        socket.leave(`show_${showId}`);
-        logger.debug(`Socket ${socket.id} left show room: show_${showId}`);
+        const roomName = `show_${showId}`;
+        socket.leave(roomName);
+        logger.debug(`Socket ${socket.id} left show room: ${roomName}`);
+        socket.emit('left_show', { showId, room: roomName });
       }
     });
 
@@ -46,7 +75,58 @@ const getIO = () => {
   return io;
 };
 
-// Helper to broadcast seat status change to show room
+/**
+ * Targeted Seat Event Broadcasters
+ */
+const broadcastSeatHeld = (showId, data) => {
+  if (io && showId) {
+    io.to(`show_${showId}`).emit('seat_held', {
+      showId,
+      seatNumbers: data.seatNumbers || [],
+      expiresAt: data.expiresAt,
+      holdId: data.holdId,
+      userId: data.userId,
+      timestamp: new Date().toISOString(),
+    });
+    // Also emit backward-compatible generic event
+    io.to(`show_${showId}`).emit('seat_status_changed', {
+      type: 'HELD',
+      seatNumbers: data.seatNumbers || [],
+      expiresAt: data.expiresAt,
+    });
+  }
+};
+
+const broadcastSeatReleased = (showId, data) => {
+  if (io && showId) {
+    io.to(`show_${showId}`).emit('seat_released', {
+      showId,
+      seatNumbers: data.seatNumbers || [],
+      timestamp: new Date().toISOString(),
+    });
+    io.to(`show_${showId}`).emit('seat_status_changed', {
+      type: 'RELEASED',
+      seatNumbers: data.seatNumbers || [],
+    });
+  }
+};
+
+const broadcastSeatBooked = (showId, data) => {
+  if (io && showId) {
+    io.to(`show_${showId}`).emit('seat_booked', {
+      showId,
+      seatNumbers: data.seatNumbers || [],
+      bookingReference: data.bookingReference,
+      timestamp: new Date().toISOString(),
+    });
+    io.to(`show_${showId}`).emit('seat_status_changed', {
+      type: 'BOOKED',
+      seatNumbers: data.seatNumbers || [],
+    });
+  }
+};
+
+// Legacy helper to broadcast seat status change to show room
 const broadcastSeatUpdate = (showId, seatData) => {
   if (io && showId) {
     io.to(`show_${showId}`).emit('seat_status_changed', seatData);
@@ -56,5 +136,8 @@ const broadcastSeatUpdate = (showId, seatData) => {
 module.exports = {
   initializeSocket,
   getIO,
+  broadcastSeatHeld,
+  broadcastSeatReleased,
+  broadcastSeatBooked,
   broadcastSeatUpdate,
 };

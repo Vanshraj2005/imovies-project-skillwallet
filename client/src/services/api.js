@@ -90,6 +90,7 @@ export const seatsApi = {
   getLayout: (showId) => api.get(`/seats/show/${showId}`),
   hold: (data) => api.post('/seats/hold', data),
   release: (data) => api.post('/seats/release', data),
+  recommend: (data) => api.post('/seats/recommend', data),
 };
 
 // Booking Endpoints
@@ -98,6 +99,7 @@ export const bookingsApi = {
   getAll: (params = {}) => api.get('/bookings', { params }),
   getById: (id) => api.get(`/bookings/${id}`),
   cancel: (id, data = {}) => api.post(`/bookings/${id}/cancel`, data),
+  checkIn: (data) => api.post('/bookings/check-in', data),
   getAllAdmin: (params = {}) => api.get('/bookings/admin/all', { params }),
 };
 

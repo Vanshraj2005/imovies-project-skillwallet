@@ -70,7 +70,7 @@ const bookingSchema = new mongoose.Schema(
     bookingStatus: {
       type: String,
       enum: {
-        values: ['CONFIRMED', 'CANCELLED', 'PENDING'],
+        values: ['CONFIRMED', 'CANCELLED', 'PENDING', 'CHECKED_IN'],
         message: '{VALUE} is not a valid booking status',
       },
       default: 'CONFIRMED',
@@ -78,7 +78,7 @@ const bookingSchema = new mongoose.Schema(
     },
     paymentStatus: {
       type: String,
-      enum: ['PAID', 'REFUNDED', 'PENDING', 'FAILED'],
+      enum: ['COMPLETED', 'PAID', 'REFUNDED', 'PENDING', 'FAILED'],
       default: 'PAID',
     },
     payment: {
@@ -87,6 +87,11 @@ const bookingSchema = new mongoose.Schema(
     },
     cancellation: {
       isCancelled: { type: Boolean, default: false },
+      cancellationStatus: {
+        type: String,
+        enum: ['NONE', 'REQUESTED', 'CANCELLED'],
+        default: 'NONE',
+      },
       cancelledAt: { type: Date },
       reason: { type: String, default: '' },
       refundAmount: { type: Number, default: 0 },
@@ -99,6 +104,10 @@ const bookingSchema = new mongoose.Schema(
     checkIn: {
       isCheckedIn: { type: Boolean, default: false },
       checkedInAt: { type: Date },
+      checkedInBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
       qrCodeReference: { type: String, default: '' },
     },
   },

@@ -35,9 +35,14 @@ const seatLockSchema = new mongoose.Schema(
       required: [true, 'User reference is required'],
       index: true,
     },
+    holdId: {
+      type: String,
+      default: null,
+      index: true,
+    },
     status: {
       type: String,
-      enum: ['HELD', 'CONFIRMED'],
+      enum: ['HELD', 'CONFIRMED', 'RELEASED', 'EXPIRED'],
       default: 'HELD',
       index: true,
     },
