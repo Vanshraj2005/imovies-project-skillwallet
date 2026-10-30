@@ -28,3 +28,4 @@ router.post('/:id/vote', protect, voteCandidate);
 router.post('/:id/finalize', protect, finalizeSelection);
 
 module.exports = router;
+

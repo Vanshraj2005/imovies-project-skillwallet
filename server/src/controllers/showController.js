@@ -66,6 +66,26 @@ const defaultShows = [
     totalSeats: 100,
     availableSeatsCount: 92,
   },
+  {
+    _id: 'sh104',
+    id: 'sh104',
+    movie: 'm101',
+    theatre: 'th101',
+    screenNumber: 1,
+    screenName: 'Audi 1 (IMAX Laser)',
+    format: 'IMAX 2D',
+    startTime: new Date(Date.now() + 3600000 * 10), // 10 hours from now
+    endTime: new Date(Date.now() + 3600000 * 13),
+    timeZone: 'America/New_York',
+    pricing: [
+      { tier: 'VIP', price: 18.0 },
+      { tier: 'Executive', price: 16.5 },
+      { tier: 'Standard', price: 14.0 },
+    ],
+    status: 'SCHEDULED',
+    totalSeats: 120,
+    availableSeatsCount: 120,
+  },
 ];
 
 let inMemoryShows = [...defaultShows];

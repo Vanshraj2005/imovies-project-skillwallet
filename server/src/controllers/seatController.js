@@ -278,7 +278,8 @@ const holdSeats = async (req, res) => {
 const releaseSeats = async (req, res) => {
   try {
     const { showId, seatNumbers, holdId } = req.body;
-    const userId = req.user._id || req.user.id;
+    const userId = String(req.user._id || req.user.id);
+    const userRole = (req.user.role || 'USER').toUpperCase();
 
     if (!showId) {
       return sendError(res, 'showId is required', 400);
@@ -293,10 +294,13 @@ const releaseSeats = async (req, res) => {
         status: 'HELD',
       };
 
+      // Strict Ownership: Non-admin users can ONLY release their own active holds
+      if (userRole !== 'ADMIN') {
+        query.user = userId;
+      }
+
       if (holdId) {
         query.holdId = holdId;
-      } else {
-        query.user = userId;
       }
 
       if (Array.isArray(seatNumbers) && seatNumbers.length > 0) {
@@ -313,11 +317,11 @@ const releaseSeats = async (req, res) => {
     } else {
       inMemoryLocks.forEach((lock, key) => {
         if (key.startsWith(`${showId}:`) && lock.status === 'HELD') {
-          const matchUserOrHold = holdId
-            ? lock.holdId === holdId
-            : String(lock.user) === String(userId);
+          const isOwner = String(lock.user) === userId;
+          const matchUser = userRole === 'ADMIN' || isOwner;
+          const matchHold = holdId ? lock.holdId === holdId : true;
 
-          if (matchUserOrHold) {
+          if (matchUser && matchHold) {
             if (!Array.isArray(seatNumbers) || seatNumbers.includes(lock.seatNumber)) {
               releasedSeatNumbers.push(lock.seatNumber);
               inMemoryLocks.delete(key);

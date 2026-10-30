@@ -108,8 +108,53 @@ const authorize = (...roles) => {
   };
 };
 
+/**
+ * OptionalAuth: Attaches user to req if valid token is provided, but does not block unauthenticated requests.
+ */
+const optionalAuth = async (req, res, next) => {
+  let token;
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith('Bearer ')
+  ) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, config.jwt.secret);
+    let user = null;
+    try {
+      user = await User.findById(decoded.id).select('+role +status');
+    } catch {
+      // Fallback
+    }
+
+    if (!user && decoded.id && decoded.email) {
+      user = {
+        _id: decoded.id,
+        id: decoded.id,
+        name: decoded.name || 'Test User',
+        email: decoded.email,
+        role: decoded.role || 'USER',
+        status: 'ACTIVE',
+      };
+    }
+
+    req.user = user;
+  } catch {
+    // Silently continue without req.user if optional token is invalid
+  }
+
+  next();
+};
+
 module.exports = {
   protect,
   authorize,
+  optionalAuth,
 };
 

@@ -3,9 +3,11 @@ import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import {
   logout,
+  loginSuccess,
   loginDemoAdmin,
   loginDemoUser,
 } from '../../features/auth/authSlice';
+import { authApi } from '../../services/api';
 import { setCurrentCity } from '../../features/ui/uiSlice';
 import { toast } from 'react-toastify';
 
@@ -48,6 +50,22 @@ const Navbar = () => {
     dispatch(logout());
     toast.info('You have been signed out.');
     navigate('/');
+  };
+
+  const handleQuickLogin = async (email, password, displayName) => {
+    try {
+      const res = await authApi.login({ email, password });
+      dispatch(
+        loginSuccess({
+          user: res.data.user,
+          token: res.data.accessToken,
+        })
+      );
+      toast.success(`Logged in as ${displayName}`);
+      setActiveDropdown(null);
+    } catch (err) {
+      toast.error(err.message || 'Login failed');
+    }
   };
 
   return (
@@ -210,34 +228,45 @@ const Navbar = () => {
                   <i className="bi bi-person-gear text-primary" />
                   <span className="small d-none d-sm-inline">Role: {role}</span>
                 </button>
-                <ul className={`dropdown-menu dropdown-menu-end shadow-sm border ${activeDropdown === 'role' ? 'show' : ''}`}>
+                <ul className={`dropdown-menu dropdown-menu-end shadow-sm border ${activeDropdown === 'role' ? 'show' : ''}`} style={{ minWidth: '240px' }}>
                   <li>
-                    <h6 className="dropdown-header small text-muted">Simulate User Account</h6>
+                    <h6 className="dropdown-header small text-muted">Multi-User Testing Personas</h6>
                   </li>
                   <li>
                     <button
-                      className="dropdown-item small d-flex align-items-center gap-2"
-                      onClick={() => {
-                        dispatch(loginDemoUser());
-                        setActiveDropdown(null);
-                        toast.success('Switched to Demo Moviegoer account');
-                      }}
+                      className="dropdown-item small d-flex align-items-center gap-2 py-2"
+                      onClick={() => handleQuickLogin('imovies.user1@example.com', 'User1@IMovies2026!', 'Test User 1')}
                     >
-                      <i className="bi bi-person text-secondary" />
-                      Demo Moviegoer (Alex)
+                      <i className="bi bi-person-fill text-primary fs-5" />
+                      <div>
+                        <div className="fw-semibold text-dark">Test User 1</div>
+                        <div className="text-muted" style={{ fontSize: '0.72rem' }}>imovies.user1@example.com</div>
+                      </div>
                     </button>
                   </li>
                   <li>
                     <button
-                      className="dropdown-item small d-flex align-items-center gap-2"
-                      onClick={() => {
-                        dispatch(loginDemoAdmin());
-                        setActiveDropdown(null);
-                        toast.success('Switched to Demo Cinema Admin account');
-                      }}
+                      className="dropdown-item small d-flex align-items-center gap-2 py-2"
+                      onClick={() => handleQuickLogin('imovies.user2@example.com', 'User2@IMovies2026!', 'Test User 2')}
                     >
-                      <i className="bi bi-shield-lock text-primary" />
-                      Demo Administrator (Sarah)
+                      <i className="bi bi-person-fill text-success fs-5" />
+                      <div>
+                        <div className="fw-semibold text-dark">Test User 2</div>
+                        <div className="text-muted" style={{ fontSize: '0.72rem' }}>imovies.user2@example.com</div>
+                      </div>
+                    </button>
+                  </li>
+                  <li><hr className="dropdown-divider my-1" /></li>
+                  <li>
+                    <button
+                      className="dropdown-item small d-flex align-items-center gap-2 py-2"
+                      onClick={() => handleQuickLogin('admin@imovies.com', 'AdminPassword123!', 'Cinema Admin (Sarah)')}
+                    >
+                      <i className="bi bi-shield-lock-fill text-danger fs-5" />
+                      <div>
+                        <div className="fw-semibold text-dark">Cinema Admin</div>
+                        <div className="text-muted" style={{ fontSize: '0.72rem' }}>admin@imovies.com (ADMIN)</div>
+                      </div>
                     </button>
                   </li>
                 </ul>

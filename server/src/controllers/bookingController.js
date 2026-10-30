@@ -458,6 +458,8 @@ const cancelBooking = async (req, res) => {
     return sendSuccess(res, 'Booking cancelled successfully. Refund initiated.', {
       bookingReference: booking.bookingReference,
       refundAmount,
+      bookingStatus: 'CANCELLED',
+      paymentStatus: 'REFUNDED',
       status: 'CANCELLED',
     });
   } catch (error) {

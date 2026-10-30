@@ -220,7 +220,29 @@ const processPayment = async (req, res) => {
 const getPaymentsByBooking = async (req, res) => {
   try {
     const { bookingId } = req.params;
+    const userId = String(req.user._id || req.user.id);
+    const userRole = (req.user.role || 'USER').toUpperCase();
     const isDBConnected = Payment.db?.readyState === 1;
+
+    // Strict Ownership Enforcement: Users can only see payment records for their own bookings
+    if (userRole !== 'ADMIN') {
+      let booking = null;
+      if (isDBConnected && bookingId.match(/^[0-9a-fA-F]{24}$/)) {
+        booking = await Booking.findById(bookingId);
+      }
+      if (!booking) {
+        const { inMemoryBookings } = require('./bookingController');
+        booking = inMemoryBookings.find((b) => b._id === bookingId || b.id === bookingId || b.bookingReference === bookingId);
+      }
+
+      if (booking && String(booking.user?._id || booking.user) !== userId) {
+        return sendError(
+          res,
+          'Forbidden: You do not have permission to view payment records for another customer’s booking.',
+          403
+        );
+      }
+    }
 
     let payments = [];
     if (isDBConnected && bookingId.match(/^[0-9a-fA-F]{24}$/)) {

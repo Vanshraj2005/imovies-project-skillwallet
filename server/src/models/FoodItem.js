@@ -74,3 +74,4 @@ foodItemSchema.index({ theatre: 1, isAvailable: 1 });
 const FoodItem = mongoose.model('FoodItem', foodItemSchema);
 
 module.exports = FoodItem;
+

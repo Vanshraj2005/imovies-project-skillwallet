@@ -385,3 +385,4 @@ const FoodMenuPage = () => {
 };
 
 export default FoodMenuPage;
+

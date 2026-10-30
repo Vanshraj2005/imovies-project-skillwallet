@@ -170,3 +170,4 @@ groupPlanSchema.index({ targetDate: 1 });
 const GroupPlan = mongoose.model('GroupPlan', groupPlanSchema);
 
 module.exports = GroupPlan;
+

@@ -487,3 +487,4 @@ const GroupMovieNightPage = () => {
 };
 
 export default GroupMovieNightPage;
+

@@ -73,6 +73,30 @@ const seedDatabase = async () => {
       },
     });
 
+    const testUser1 = await User.create({
+      name: 'IMovies Customer One',
+      email: 'imovies.user1@example.com',
+      password: 'User1@IMovies2026!',
+      role: 'USER',
+      phone: '+1 (555) 101-0001',
+      preferences: {
+        genres: ['Sci-Fi', 'Action'],
+        languages: ['English'],
+      },
+    });
+
+    const testUser2 = await User.create({
+      name: 'IMovies Customer Two',
+      email: 'imovies.user2@example.com',
+      password: 'User2@IMovies2026!',
+      role: 'USER',
+      phone: '+1 (555) 102-0002',
+      preferences: {
+        genres: ['Adventure', 'Drama'],
+        languages: ['English'],
+      },
+    });
+
     // eslint-disable-next-line no-console
     console.log('2. Seeding Theatres & Auditoriums...');
     const theatre1 = await Theatre.create({

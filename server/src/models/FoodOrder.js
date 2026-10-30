@@ -127,3 +127,4 @@ foodOrderSchema.index({ theatre: 1, status: 1 });
 const FoodOrder = mongoose.model('FoodOrder', foodOrderSchema);
 
 module.exports = FoodOrder;
+

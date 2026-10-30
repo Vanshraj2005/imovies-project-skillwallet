@@ -10,7 +10,58 @@ const { sendSuccess, sendError } = require('../utils/apiResponse');
 const { logger } = require('../utils/logger');
 
 // In-memory fallback user store for development or testing when MongoDB is disconnected
-const inMemoryUsers = [];
+const inMemoryUsers = [
+  {
+    _id: 'usr_test_user1',
+    id: 'usr_test_user1',
+    name: 'IMovies Customer One',
+    email: 'imovies.user1@example.com',
+    password: bcrypt.hashSync('User1@IMovies2026!', 10),
+    role: 'USER',
+    phone: '+1 (555) 101-0001',
+    status: 'ACTIVE',
+    preferences: { genres: ['Sci-Fi', 'Action'], languages: ['English'] },
+    accessibility: { wheelchairSeatingPreferred: false },
+    notifications: { emailAlerts: true },
+    createdAt: new Date(),
+  },
+  {
+    _id: 'usr_test_user2',
+    id: 'usr_test_user2',
+    name: 'IMovies Customer Two',
+    email: 'imovies.user2@example.com',
+    password: bcrypt.hashSync('User2@IMovies2026!', 10),
+    role: 'USER',
+    phone: '+1 (555) 102-0002',
+    status: 'ACTIVE',
+    preferences: { genres: ['Adventure', 'Drama'], languages: ['English'] },
+    accessibility: { wheelchairSeatingPreferred: false },
+    notifications: { emailAlerts: true },
+    createdAt: new Date(),
+  },
+  {
+    _id: 'usr_admin_01',
+    id: 'usr_admin_01',
+    name: 'Sarah Connor (Admin)',
+    email: 'admin@imovies.com',
+    password: bcrypt.hashSync('AdminPassword123!', 10),
+    role: 'ADMIN',
+    phone: '+1 (555) 019-2834',
+    status: 'ACTIVE',
+    createdAt: new Date(),
+  },
+  {
+    _id: 'usr_customer_01',
+    id: 'usr_customer_01',
+    name: 'Alex Johnson',
+    email: 'user@imovies.com',
+    password: bcrypt.hashSync('UserPassword123!', 10),
+    role: 'USER',
+    phone: '+1 (555) 843-9201',
+    status: 'ACTIVE',
+    createdAt: new Date(),
+  },
+];
 
 /**
  * Register User
