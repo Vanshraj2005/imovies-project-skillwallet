@@ -525,3 +525,4 @@ const AdminTheatresPage = () => {
 };
 
 export default AdminTheatresPage;
+
