@@ -11,7 +11,10 @@ const AdminLayout = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const isAdmin = isAuthenticated && role === 'admin';
+  const isAdmin =
+    isAuthenticated &&
+    (String(role).toUpperCase() === 'ADMIN' ||
+      String(user?.role).toUpperCase() === 'ADMIN');
 
   return (
     <div className="d-flex min-vh-100 bg-light">
@@ -60,8 +63,12 @@ const AdminLayout = () => {
           </li>
           <li className="nav-item">
             <NavLink
-              to="/theatres"
-              className="nav-link d-flex align-items-center gap-2 text-secondary"
+              to="/admin/theatres"
+              className={({ isActive }) =>
+                `nav-link d-flex align-items-center gap-2 ${
+                  isActive ? 'active' : 'text-secondary'
+                }`
+              }
             >
               <i className="bi bi-building" />
               Theatres & Screens
@@ -69,8 +76,12 @@ const AdminLayout = () => {
           </li>
           <li className="nav-item">
             <NavLink
-              to="/shows"
-              className="nav-link d-flex align-items-center gap-2 text-secondary"
+              to="/admin/shows"
+              className={({ isActive }) =>
+                `nav-link d-flex align-items-center gap-2 ${
+                  isActive ? 'active' : 'text-secondary'
+                }`
+              }
             >
               <i className="bi bi-calendar3" />
               Show Scheduling
@@ -78,8 +89,12 @@ const AdminLayout = () => {
           </li>
           <li className="nav-item">
             <NavLink
-              to="/bookings"
-              className="nav-link d-flex align-items-center gap-2 text-secondary"
+              to="/admin/bookings"
+              className={({ isActive }) =>
+                `nav-link d-flex align-items-center gap-2 ${
+                  isActive ? 'active' : 'text-secondary'
+                }`
+              }
             >
               <i className="bi bi-ticket-perforated" />
               Bookings Oversight

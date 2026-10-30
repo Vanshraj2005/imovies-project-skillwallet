@@ -1,99 +1,142 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { bookingsApi, notificationsApi } from '../services/api';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
 import Badge from '../components/common/Badge';
+import EmptyState from '../components/common/EmptyState';
+import ErrorAlert from '../components/common/ErrorAlert';
 import { toast } from 'react-toastify';
 
-const mockBookings = [
-  {
-    id: 'BK-902144',
-    movieTitle: 'Interstellar: Beyond Time',
-    theatre: 'IMovies Grand Cinema - Times Square',
-    screen: 'Audi 1 (IMAX Laser)',
-    date: '2026-11-05',
-    time: '07:30 PM',
-    seats: ['A4', 'A5'],
-    total: 34.50,
-    status: 'Confirmed',
-    isUpcoming: true,
-  },
-  {
-    id: 'BK-841920',
-    movieTitle: 'The Silent Horizon',
-    theatre: 'IMovies Downtown Royale',
-    screen: 'Audi 3 (Dolby Atmos)',
-    date: '2026-11-02',
-    time: '04:15 PM',
-    seats: ['C6', 'C7'],
-    total: 29.50,
-    status: 'Confirmed',
-    isUpcoming: true,
-  },
-  {
-    id: 'BK-519201',
-    movieTitle: 'Neon Odyssey 2099',
-    theatre: 'IMovies Grand Cinema - Times Square',
-    screen: 'Audi 2 (4DX)',
-    date: '2026-10-18',
-    time: '09:00 PM',
-    seats: ['D3'],
-    total: 15.50,
-    status: 'Completed',
-    isUpcoming: false,
-  },
-];
-
 const BookingHistoryPage = () => {
-  const [activeTab, setActiveTab] = useState('upcoming');
-  const [bookingsList, setBookingsList] = useState(mockBookings);
+  const [activeTab, setActiveTab] = useState('upcoming'); // 'upcoming' | 'past' | 'cancelled' | 'notifications'
+  const [bookingsList, setBookingsList] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [cancelModalBooking, setCancelModalBooking] = useState(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
-  const filtered = bookingsList.filter((b) =>
-    activeTab === 'upcoming' ? b.isUpcoming : !b.isUpcoming
+  const loadData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [bookingsRes, notifRes] = await Promise.all([
+        bookingsApi.getAll().catch(() => ({ data: [] })),
+        notificationsApi.getAll().catch(() => ({ data: [] })),
+      ]);
+      setBookingsList(bookingsRes.data || []);
+      setNotifications(notifRes.data || []);
+    } catch (err) {
+      setError(err.message || 'Failed to load booking history.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Filter bookings by tab status
+  const upcomingBookings = bookingsList.filter((b) => {
+    const isCancelled = b.bookingStatus === 'CANCELLED' || b.cancellation?.isCancelled;
+    if (isCancelled) return false;
+    const showTime = b.show?.startTime ? new Date(b.show.startTime) : new Date(b.createdAt || Date.now());
+    return showTime >= new Date();
+  });
+
+  const pastBookings = bookingsList.filter((b) => {
+    const isCancelled = b.bookingStatus === 'CANCELLED' || b.cancellation?.isCancelled;
+    if (isCancelled) return false;
+    const showTime = b.show?.startTime ? new Date(b.show.startTime) : new Date(b.createdAt || Date.now());
+    return showTime < new Date();
+  });
+
+  const cancelledBookings = bookingsList.filter(
+    (b) => b.bookingStatus === 'CANCELLED' || b.cancellation?.isCancelled
   );
 
-  const handleConfirmCancel = () => {
+  const handleConfirmCancel = async () => {
     if (!cancelModalBooking) return;
+    setIsCancelling(true);
+    try {
+      const id = cancelModalBooking._id || cancelModalBooking.id;
+      await bookingsApi.cancel(id, { reason: 'Customer requested cancellation' });
 
-    setBookingsList((prev) =>
-      prev.map((b) =>
-        b.id === cancelModalBooking.id
-          ? { ...b, status: 'Cancelled', isUpcoming: false }
-          : b
-      )
-    );
-
-    toast.info(`Booking ${cancelModalBooking.id} has been cancelled. Refund initiated.`);
-    setCancelModalBooking(null);
+      toast.info(`Booking ${cancelModalBooking.bookingReference} has been cancelled. Refund initiated.`);
+      setCancelModalBooking(null);
+      await loadData();
+    } catch (err) {
+      toast.error(err.message || 'Failed to cancel booking.');
+    } finally {
+      setIsCancelling(false);
+    }
   };
+
+  const handleMarkNotifRead = async (id) => {
+    try {
+      await notificationsApi.markAsRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (n._id === id || n.id === id ? { ...n, isRead: true } : n))
+      );
+    } catch {
+      // optimistic update
+    }
+  };
+
+  const handleMarkAllNotifsRead = async () => {
+    try {
+      await notificationsApi.markAllAsRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      toast.success('All notifications marked as read.');
+    } catch {
+      // optimistic update
+    }
+  };
+
+  const unreadNotifsCount = notifications.filter((n) => !n.isRead).length;
 
   return (
     <div className="container py-4">
       <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
         <div>
-          <h1 className="h3 fw-bold text-dark mb-1">My Booking History</h1>
+          <h1 className="h3 fw-bold text-dark mb-1">My Bookings & Tickets</h1>
           <p className="text-secondary small mb-0">
-            View active e-tickets, check admissions status, or manage eligible cancellations
+            View active admissions gate passes, review past visits, and manage eligible bookings
           </p>
         </div>
 
-        <Link to="/shows" className="btn btn-sm btn-primary">
-          <i className="bi bi-plus-lg me-1" />
-          Book New Tickets
-        </Link>
+        <div className="d-flex gap-2">
+          <Link to="/shows" className="btn btn-sm btn-primary">
+            <i className="bi bi-plus-lg me-1" />
+            Book New Tickets
+          </Link>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary"
+            onClick={loadData}
+            title="Refresh bookings"
+          >
+            <i className="bi bi-arrow-clockwise" />
+          </button>
+        </div>
       </div>
 
-      {/* Tabs */}
+      {error && <ErrorAlert message={error} onRetry={loadData} className="mb-4" />}
+
+      {/* Tabs Bar */}
       <div className="bg-white border rounded p-2 mb-4 shadow-sm">
-        <ul className="nav nav-pills">
+        <ul className="nav nav-pills gap-1">
           <li className="nav-item">
             <button
               className={`nav-link small fw-semibold ${activeTab === 'upcoming' ? 'active' : 'text-secondary'}`}
               onClick={() => setActiveTab('upcoming')}
             >
-              Upcoming Screenings ({bookingsList.filter((b) => b.isUpcoming).length})
+              <i className="bi bi-ticket-perforated me-1" />
+              Upcoming ({upcomingBookings.length})
             </button>
           </li>
           <li className="nav-item">
@@ -101,174 +144,278 @@ const BookingHistoryPage = () => {
               className={`nav-link small fw-semibold ${activeTab === 'past' ? 'active' : 'text-secondary'}`}
               onClick={() => setActiveTab('past')}
             >
-              Past Bookings & Cancellations
+              <i className="bi bi-clock-history me-1" />
+              Past Visits ({pastBookings.length})
+            </button>
+          </li>
+          <li className="nav-item">
+            <button
+              className={`nav-link small fw-semibold ${activeTab === 'cancelled' ? 'active' : 'text-secondary'}`}
+              onClick={() => setActiveTab('cancelled')}
+            >
+              <i className="bi bi-x-circle me-1" />
+              Cancelled ({cancelledBookings.length})
+            </button>
+          </li>
+          <li className="nav-item ms-auto">
+            <button
+              className={`nav-link small fw-semibold ${activeTab === 'notifications' ? 'active' : 'text-secondary'}`}
+              onClick={() => setActiveTab('notifications')}
+            >
+              <i className="bi bi-bell me-1" />
+              Notifications
+              {unreadNotifsCount > 0 && (
+                <span className="badge bg-danger ms-1">{unreadNotifsCount}</span>
+              )}
             </button>
           </li>
         </ul>
       </div>
 
-      {/* Bookings List */}
-      <div className="d-flex flex-column gap-3">
-        {filtered.length > 0 ? (
-          filtered.map((booking) => (
-            <div className="bg-white border rounded p-4 shadow-sm" key={booking.id}>
-              <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 pb-3 mb-3 border-bottom">
-                <div>
-                  <div className="d-flex align-items-center gap-2 mb-1">
-                    <span className="fw-bold font-monospace small text-primary">
-                      {booking.id}
-                    </span>
-                    <Badge
-                      variant={
-                        booking.status === 'Confirmed'
-                          ? 'success'
-                          : booking.status === 'Cancelled'
-                          ? 'danger'
-                          : 'neutral'
-                      }
+      {/* Content Area */}
+      {loading ? (
+        <div className="text-center py-5">
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Loading bookings...</span>
+          </div>
+        </div>
+      ) : activeTab === 'notifications' ? (
+        /* Notifications Tab */
+        <div className="bg-white border rounded p-4 shadow-sm">
+          <div className="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
+            <h2 className="h6 fw-bold text-dark mb-0">Notification Center</h2>
+            {unreadNotifsCount > 0 && (
+              <button
+                type="button"
+                className="btn btn-sm btn-link text-decoration-none small"
+                onClick={handleMarkAllNotifsRead}
+              >
+                Mark all as read
+              </button>
+            )}
+          </div>
+
+          {notifications.length > 0 ? (
+            <div className="list-group list-group-flush">
+              {notifications.map((n) => (
+                <div
+                  key={n._id || n.id}
+                  className={`list-group-item d-flex justify-content-between align-items-start px-0 py-3 ${
+                    !n.isRead ? 'bg-light rounded p-2 mb-2' : ''
+                  }`}
+                >
+                  <div className="ms-2 me-auto">
+                    <div className="fw-bold small text-dark d-flex align-items-center gap-2">
+                      <i className="bi bi-info-circle text-primary" />
+                      {n.title || 'Booking Notification'}
+                    </div>
+                    <div className="text-secondary small mt-1">{n.message}</div>
+                    <div className="text-muted" style={{ fontSize: '0.7rem' }}>
+                      {new Date(n.createdAt || Date.now()).toLocaleString()}
+                    </div>
+                  </div>
+                  {!n.isRead && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-light border text-muted small ms-2"
+                      onClick={() => handleMarkNotifRead(n._id || n.id)}
                     >
-                      {booking.status}
-                    </Badge>
-                  </div>
-                  <h5 className="fw-bold text-dark mb-0">{booking.movieTitle}</h5>
-                  <div className="text-secondary small">
-                    {booking.theatre} • {booking.screen}
-                  </div>
-                </div>
-
-                <div className="text-md-end">
-                  <span className="small text-muted d-block">Total Paid</span>
-                  <span className="fw-bold fs-5 text-dark">${booking.total.toFixed(2)}</span>
-                </div>
-              </div>
-
-              <div className="row g-3 align-items-center">
-                <div className="col-md-8">
-                  <div className="d-flex flex-wrap gap-4 text-secondary small">
-                    <div>
-                      <span className="text-muted d-block">Date:</span>
-                      <strong className="text-dark">{booking.date}</strong>
-                    </div>
-                    <div>
-                      <span className="text-muted d-block">Time:</span>
-                      <strong className="text-dark">{booking.time}</strong>
-                    </div>
-                    <div>
-                      <span className="text-muted d-block">Seats:</span>
-                      <div className="d-flex gap-1 mt-1">
-                        {booking.seats.map((s) => (
-                          <span key={s} className="badge bg-light text-dark border">
-                            {s}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="col-md-4 d-flex justify-content-md-end gap-2">
-                  <Button
-                    variant="outline-primary"
-                    size="sm"
-                    onClick={() => setSelectedTicket(booking)}
-                  >
-                    <i className="bi bi-qr-code me-1" />
-                    View Ticket
-                  </Button>
-
-                  {booking.isUpcoming && booking.status === 'Confirmed' && (
-                    <Button
-                      variant="light"
-                      size="sm"
-                      className="text-danger"
-                      onClick={() => setCancelModalBooking(booking)}
-                    >
-                      Cancel
-                    </Button>
+                      Mark read
+                    </button>
                   )}
                 </div>
-              </div>
+              ))}
             </div>
-          ))
-        ) : (
-          <div className="bg-white border rounded p-5 text-center shadow-sm">
-            <i className="bi bi-ticket-perforated fs-1 text-muted mb-2 d-block" />
-            <h6 className="fw-bold text-dark">No bookings found</h6>
-            <p className="text-muted small mb-3">
-              You do not have any {activeTab === 'upcoming' ? 'upcoming' : 'past'} movie bookings.
-            </p>
-            <Link to="/shows" className="btn btn-sm btn-primary">
-              Explore Current Showtimes
-            </Link>
-          </div>
-        )}
-      </div>
+          ) : (
+            <div className="text-center py-4 text-muted small">
+              You have no new alerts or notifications at this time.
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Bookings List */
+        <div>
+          {(() => {
+            const list =
+              activeTab === 'upcoming'
+                ? upcomingBookings
+                : activeTab === 'past'
+                ? pastBookings
+                : cancelledBookings;
 
-      {/* QR Ticket View Modal */}
+            if (list.length === 0) {
+              return (
+                <EmptyState
+                  title={`No ${activeTab} bookings`}
+                  description={`You do not have any ${activeTab} movie ticket reservations.`}
+                  actionLabel="Discover Movies & Showtimes"
+                  onAction={() => (window.location.href = '/shows')}
+                />
+              );
+            }
+
+            return (
+              <div className="row g-3">
+                {list.map((booking) => {
+                  const ref = booking.bookingReference || booking.id || 'BK-XXXXXX';
+                  const movieTitle = booking.movieTitle || booking.movie?.title || 'Feature Film';
+                  const theatreName = booking.theatreName || booking.theatre?.name || 'Grand Cinema';
+                  const seatsList = Array.isArray(booking.seats)
+                    ? booking.seats.map((s) => (typeof s === 'object' ? s.seatNumber : s)).join(', ')
+                    : booking.seats || 'N/A';
+                  const total = booking.pricing?.totalAmount ?? booking.total ?? 0;
+                  const isCancelled = booking.bookingStatus === 'CANCELLED';
+
+                  return (
+                    <div className="col-12" key={booking._id || booking.id || ref}>
+                      <div className="bg-white border rounded p-4 shadow-sm">
+                        <div className="d-flex flex-column flex-md-row justify-content-between align-items-start gap-3">
+                          <div className="flex-grow-1">
+                            <div className="d-flex align-items-center gap-2 mb-2">
+                              <span className="badge bg-light text-primary border font-monospace fw-bold">
+                                {ref}
+                              </span>
+                              <Badge variant={isCancelled ? 'neutral' : 'success'}>
+                                {isCancelled ? 'Cancelled & Refunded' : 'Confirmed Admission'}
+                              </Badge>
+                              <span className="text-muted small">
+                                {new Date(booking.createdAt || Date.now()).toLocaleDateString()}
+                              </span>
+                            </div>
+
+                            <h2 className="h5 fw-bold text-dark mb-1">{movieTitle}</h2>
+                            <div className="text-secondary small mb-2">
+                              <i className="bi bi-building me-1 text-primary" />
+                              {theatreName}
+                            </div>
+
+                            <div className="d-flex flex-wrap align-items-center gap-3 text-muted small">
+                              <span>
+                                <i className="bi bi-ticket-perforated me-1 text-primary" />
+                                Seats: <strong className="text-dark">{seatsList}</strong>
+                              </span>
+                              <span>•</span>
+                              <span>
+                                Amount Paid: <strong className="text-primary">${Number(total).toFixed(2)}</strong>
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="d-flex flex-column flex-sm-row gap-2 align-self-stretch align-self-md-auto">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-primary d-flex align-items-center justify-content-center gap-1"
+                              onClick={() => setSelectedTicket(booking)}
+                            >
+                              <i className="bi bi-qr-code" />
+                              View E-Ticket
+                            </button>
+
+                            {activeTab === 'upcoming' && !isCancelled && (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-light border text-danger d-flex align-items-center justify-content-center gap-1"
+                                onClick={() => setCancelModalBooking(booking)}
+                              >
+                                <i className="bi bi-x-circle" />
+                                Cancel
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* E-Ticket QR Gate Pass Modal */}
       {selectedTicket && (
         <Modal
           isOpen={!!selectedTicket}
           onClose={() => setSelectedTicket(null)}
-          title={`Digital Admission Pass - ${selectedTicket.id}`}
+          title={`Digital E-Ticket: ${selectedTicket.bookingReference || selectedTicket.id}`}
+          primaryActionLabel="Print Ticket"
+          onPrimaryAction={() => window.print()}
+          size="md"
         >
-          <div className="text-center p-2">
-            <h5 className="fw-bold text-dark mb-1">{selectedTicket.movieTitle}</h5>
-            <div className="text-secondary small mb-3">{selectedTicket.theatre}</div>
-
-            <div className="p-3 bg-light border rounded d-inline-block mb-3">
-              <svg width="140" height="140" viewBox="0 0 120 120" fill="none">
-                <rect width="120" height="120" fill="white" />
-                <rect x="10" y="10" width="30" height="30" fill="#0f172a" />
-                <rect x="15" y="15" width="20" height="20" fill="white" />
-                <rect x="20" y="20" width="10" height="10" fill="#0f172a" />
-                <rect x="80" y="10" width="30" height="30" fill="#0f172a" />
-                <rect x="85" y="15" width="20" height="20" fill="white" />
-                <rect x="90" y="20" width="10" height="10" fill="#0f172a" />
-                <rect x="10" y="80" width="30" height="30" fill="#0f172a" />
-                <rect x="15" y="85" width="20" height="20" fill="white" />
-                <rect x="20" y="90" width="10" height="10" fill="#0f172a" />
-                <rect x="50" y="50" width="20" height="20" fill="#0f172a" />
-                <rect x="50" y="80" width="25" height="15" fill="#0f172a" />
-              </svg>
+          <div className="text-center p-3 bg-light border rounded mb-3">
+            <div className="bg-white p-3 rounded border d-inline-block shadow-sm mb-3">
+              <i className="bi bi-qr-code text-dark display-1 d-block" />
+              <span className="small text-muted font-monospace d-block mt-1">
+                {selectedTicket.checkIn?.qrCodeReference || `QR-${selectedTicket.bookingReference}`}
+              </span>
+            </div>
+            <h5 className="fw-bold text-dark mb-1">
+              {selectedTicket.movieTitle || selectedTicket.movie?.title}
+            </h5>
+            <div className="text-secondary small mb-2">
+              {selectedTicket.theatreName || selectedTicket.theatre?.name}
             </div>
 
-            <div className="d-flex justify-content-center gap-3 small text-secondary mb-3">
+            <div className="d-flex justify-content-center gap-3 py-2 border-top border-bottom small">
               <div>
-                <strong>Date:</strong> {selectedTicket.date}
+                <span className="text-muted d-block" style={{ fontSize: '0.7rem' }}>
+                  Seats
+                </span>
+                <strong className="text-dark">
+                  {Array.isArray(selectedTicket.seats)
+                    ? selectedTicket.seats
+                        .map((s) => (typeof s === 'object' ? s.seatNumber : s))
+                        .join(', ')
+                    : selectedTicket.seats}
+                </strong>
               </div>
+              <div className="vr" />
               <div>
-                <strong>Time:</strong> {selectedTicket.time}
+                <span className="text-muted d-block" style={{ fontSize: '0.7rem' }}>
+                  Admissions
+                </span>
+                <strong className="text-dark">
+                  {selectedTicket.ticketCount || selectedTicket.seats?.length || 1}
+                </strong>
               </div>
+              <div className="vr" />
               <div>
-                <strong>Seats:</strong> {selectedTicket.seats.join(', ')}
+                <span className="text-muted d-block" style={{ fontSize: '0.7rem' }}>
+                  Total Paid
+                </span>
+                <strong className="text-primary">
+                  ${Number(selectedTicket.pricing?.totalAmount ?? selectedTicket.total ?? 0).toFixed(2)}
+                </strong>
               </div>
             </div>
 
-            <div className="small text-muted border-top pt-2">
-              Present this pass at the cinema turnstile for admission.
+            <div className="small text-success mt-2">
+              <i className="bi bi-check-circle-fill me-1" />
+              Contactless gate entry confirmed • Show QR at cinema scanner
             </div>
           </div>
         </Modal>
       )}
 
-      {/* Cancellation Confirmation Modal */}
-      {cancelModalBooking && (
-        <Modal
-          isOpen={!!cancelModalBooking}
-          onClose={() => setCancelModalBooking(null)}
-          title="Confirm Ticket Cancellation"
-          primaryActionLabel="Confirm Cancellation & Refund"
-          onPrimaryAction={handleConfirmCancel}
-        >
-          <p className="text-secondary small mb-3">
-            Are you sure you want to cancel booking <strong>{cancelModalBooking.id}</strong> for{' '}
-            <strong>{cancelModalBooking.movieTitle}</strong>?
-          </p>
-          <div className="alert alert-warning small mb-0">
-            A full refund of <strong>${cancelModalBooking.total.toFixed(2)}</strong> will be credited back to your original payment method within 3–5 business days according to the cinema refund policy.
-          </div>
-        </Modal>
-      )}
+      {/* Cancel Confirmation Modal */}
+      <Modal
+        isOpen={!!cancelModalBooking}
+        onClose={() => setCancelModalBooking(null)}
+        title="Confirm Ticket Cancellation"
+        primaryActionLabel="Confirm Cancellation"
+        primaryActionVariant="danger"
+        onPrimaryAction={handleConfirmCancel}
+        isPrimaryLoading={isCancelling}
+      >
+        <p className="text-secondary small mb-2">
+          Are you sure you want to cancel booking{' '}
+          <strong>"{cancelModalBooking?.bookingReference}"</strong>?
+        </p>
+        <div className="p-3 bg-light border rounded small mb-2 text-muted">
+          Your seats will be released back to the general inventory and a full refund will be processed to your original payment method.
+        </div>
+      </Modal>
     </div>
   );
 };

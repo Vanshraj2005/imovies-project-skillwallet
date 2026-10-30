@@ -1,26 +1,37 @@
-import React, { useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchMovies, setFilters } from '../features/movies/moviesSlice';
+import { setCurrentCity } from '../features/ui/uiSlice';
 import MovieCard from '../components/common/MovieCard';
 import LoadingSkeleton from '../components/common/LoadingSkeleton';
 import EmptyState from '../components/common/EmptyState';
 import ErrorAlert from '../components/common/ErrorAlert';
 
 const HomePage = () => {
+  const navigate = useNavigate();
   const dispatch = useDispatch();
+
   const { movies, loading, error, filters } = useSelector((state) => state.movies);
-  const { currentCity } = useSelector((state) => state.ui);
+  const { currentCity, availableCities } = useSelector((state) => state.ui);
+  const { isAuthenticated, user } = useSelector((state) => state.auth);
+
+  const [heroSearch, setHeroSearch] = useState('');
 
   useEffect(() => {
     dispatch(fetchMovies(filters));
   }, [dispatch, filters]);
 
-  const featuredMovie = movies.find((m) => m.status === 'now_showing') || movies[0];
-  const nowShowingMovies = movies.filter((m) => m.status === 'now_showing');
-  const comingSoonMovies = movies.filter((m) => m.status === 'coming_soon');
+  const handleHeroSearch = (e) => {
+    e.preventDefault();
+    if (heroSearch.trim()) {
+      navigate(`/movies?search=${encodeURIComponent(heroSearch.trim())}`);
+    }
+  };
 
-  const genres = ['All', 'Sci-Fi', 'Action', 'Drama', 'Thriller', 'Romance'];
+  const featuredMovie = movies.find((m) => m.status === 'now_showing') || movies[0];
+  const genres = ['All', 'Sci-Fi', 'Action', 'Adventure', 'Drama', 'Thriller', 'Romance'];
+  const languages = ['All', 'English', 'Spanish', 'French', 'Japanese'];
 
   return (
     <div className="home-page pb-5">
@@ -30,19 +41,43 @@ const HomePage = () => {
           <div className="container">
             <div className="row align-items-center g-4">
               <div className="col-lg-8 col-md-7">
-                <div className="d-flex align-items-center gap-2 mb-2">
+                <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
                   <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
                     Featured Screening
                   </span>
-                  <span className="text-muted small">in {currentCity}</span>
+                  <div className="dropdown d-inline-block">
+                    <button
+                      className="btn btn-sm btn-light border dropdown-toggle py-0.5 px-2 text-secondary small"
+                      type="button"
+                      data-bs-toggle="dropdown"
+                    >
+                      <i className="bi bi-geo-alt-fill text-primary me-1" />
+                      {currentCity}
+                    </button>
+                    <ul className="dropdown-menu shadow-sm border small">
+                      {availableCities.map((city) => (
+                        <li key={city}>
+                          <button
+                            type="button"
+                            className={`dropdown-item ${city === currentCity ? 'active' : ''}`}
+                            onClick={() => dispatch(setCurrentCity(city))}
+                          >
+                            {city}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
+
                 <h1 className="display-6 fw-bold text-dark mb-2">{featuredMovie.title}</h1>
-                <p className="text-secondary mb-3 fs-6" style={{ maxWidth: '620px' }}>
+                <p className="text-secondary mb-3 fs-6" style={{ maxWidth: '640px' }}>
                   {featuredMovie.synopsis}
                 </p>
+
                 <div className="d-flex flex-wrap align-items-center gap-3 text-secondary small mb-4">
                   <span className="badge bg-light text-dark border">
-                    {featuredMovie.certificate}
+                    {featuredMovie.certificate || 'PG-13'}
                   </span>
                   <span>
                     <i className="bi bi-clock me-1 text-primary" />
@@ -50,14 +85,15 @@ const HomePage = () => {
                   </span>
                   <span>
                     <i className="bi bi-star-fill me-1 text-warning" />
-                    <strong>{featuredMovie.rating}</strong> / 10
+                    <strong>{featuredMovie.rating ? featuredMovie.rating.toFixed(1) : '8.2'}</strong> / 10
                   </span>
                   <span>
                     <i className="bi bi-translate me-1 text-primary" />
-                    {featuredMovie.language}
+                    {featuredMovie.language || 'English'}
                   </span>
                 </div>
-                <div className="d-flex flex-wrap gap-2">
+
+                <div className="d-flex flex-wrap gap-2 mb-3">
                   <Link
                     to={`/shows?movieId=${featuredMovie._id || featuredMovie.id}`}
                     className="btn btn-primary fw-medium px-4 d-inline-flex align-items-center gap-2"
@@ -72,6 +108,25 @@ const HomePage = () => {
                     View Details
                   </Link>
                 </div>
+
+                {/* Quick Search inside Hero */}
+                <form onSubmit={handleHeroSearch} className="d-flex mt-3" style={{ maxWidth: '420px' }}>
+                  <div className="input-group input-group-sm">
+                    <span className="input-group-text bg-light border-end-0 text-muted">
+                      <i className="bi bi-search" />
+                    </span>
+                    <input
+                      type="text"
+                      className="form-control bg-light border-start-0"
+                      placeholder="Search any title, actor, or genre..."
+                      value={heroSearch}
+                      onChange={(e) => setHeroSearch(e.target.value)}
+                    />
+                    <button className="btn btn-primary" type="submit">
+                      Search
+                    </button>
+                  </div>
+                </form>
               </div>
 
               <div className="col-lg-4 col-md-5 d-none d-md-block text-center">
@@ -84,6 +139,10 @@ const HomePage = () => {
                     alt={featuredMovie.title}
                     className="img-fluid"
                     style={{ maxHeight: '380px', objectFit: 'cover' }}
+                    onError={(e) => {
+                      e.target.src =
+                        'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=600&q=80';
+                    }}
                   />
                 </div>
               </div>
@@ -94,7 +153,7 @@ const HomePage = () => {
 
       {/* Main Content Area */}
       <div className="container">
-        {/* Quick Filter Strip */}
+        {/* Quick Discovery Strip */}
         <div className="bg-white border rounded p-3 mb-4 shadow-sm">
           <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
             <div className="d-flex flex-wrap align-items-center gap-2">
@@ -191,6 +250,26 @@ const HomePage = () => {
             />
           )}
         </div>
+
+        {/* User Account Quick Banner (if logged in) */}
+        {isAuthenticated && (
+          <div className="bg-primary-subtle border border-primary-subtle rounded p-3 mb-4 d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3">
+            <div className="d-flex align-items-center gap-2">
+              <i className="bi bi-person-check-fill text-primary fs-4" />
+              <div>
+                <span className="fw-bold text-dark small d-block">
+                  Signed in as {user?.name || 'Customer'}
+                </span>
+                <span className="text-secondary small">
+                  Quick access to your active e-tickets and reservation records
+                </span>
+              </div>
+            </div>
+            <Link to="/dashboard" className="btn btn-sm btn-primary">
+              View Dashboard & Tickets
+            </Link>
+          </div>
+        )}
 
         {/* How Booking Works Strip */}
         <section className="bg-white border rounded p-4 mb-5 shadow-sm">

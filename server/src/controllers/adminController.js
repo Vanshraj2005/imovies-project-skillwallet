@@ -7,6 +7,9 @@ const Theatre = require('../models/Theatre');
 const Show = require('../models/Show');
 const Booking = require('../models/Booking');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
+const { inMemoryBookings } = require('./bookingController');
+const { inMemoryShows } = require('./showController');
+const { inMemoryTheatres } = require('./theatreController');
 
 /**
  * Get Consolidated Operations Overview
@@ -42,18 +45,15 @@ const getOverview = async (req, res) => {
         .sort({ createdAt: -1 })
         .limit(10);
     } else {
-      recentBookings = [
-        {
-          id: 'BK-902144',
-          customerName: 'Alex Johnson',
-          movieTitle: 'Interstellar: Beyond Time',
-          theatreName: 'Times Square',
-          seats: ['A4', 'A5'],
-          totalAmount: 34.5,
-          status: 'Confirmed',
-          createdAt: new Date(),
-        },
-      ];
+      activeTheatres = inMemoryTheatres.length;
+      activeShows = inMemoryShows.filter((s) => s.status !== 'CANCELLED').length;
+      activeMovies = 6;
+      recentBookings = inMemoryBookings.slice(0, 10);
+      const confirmed = inMemoryBookings.filter((b) => b.bookingStatus === 'CONFIRMED');
+      if (confirmed.length > 0) {
+        totalTickets = confirmed.reduce((sum, b) => sum + (b.ticketCount || b.seats?.length || 1), 0);
+        totalRevenue = confirmed.reduce((sum, b) => sum + (b.pricing?.totalAmount || 15.0), 0);
+      }
     }
 
     const overview = {

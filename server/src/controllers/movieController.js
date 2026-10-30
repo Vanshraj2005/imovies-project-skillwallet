@@ -3,8 +3,12 @@
  * Handles movie catalog querying, full-text search, filtering, and admin CRUD.
  */
 const Movie = require('../models/Movie');
+const Show = require('../models/Show');
+const Theatre = require('../models/Theatre');
 const initialMovies = require('../data/initialMovies');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
+const { inMemoryShows } = require('./showController');
+const { inMemoryTheatres } = require('./theatreController');
 
 // Working in-memory catalogue fallback
 let inMemoryMovies = [...initialMovies];
@@ -20,6 +24,9 @@ const getMovies = async (req, res) => {
       language,
       status,
       search,
+      theatreId,
+      city,
+      date,
       sort = 'rating',
       page = 1,
       limit = 10,
@@ -49,6 +56,30 @@ const getMovies = async (req, res) => {
 
       if (search && search.trim() !== '') {
         query.$text = { $search: search.trim() };
+      }
+
+      // Filter movies matching shows on theatre, city, or date
+      if (theatreId || (city && city !== 'All') || date) {
+        const showQuery = { status: { $ne: 'CANCELLED' } };
+        if (theatreId && theatreId.match(/^[0-9a-fA-F]{24}$/)) {
+          showQuery.theatre = theatreId;
+        } else if (city && city !== 'All') {
+          const theatresInCity = await Theatre.find({
+            city: new RegExp(`^${city}$`, 'i'),
+          }).select('_id');
+          showQuery.theatre = { $in: theatresInCity.map((t) => t._id) };
+        }
+
+        if (date) {
+          const startOfDay = new Date(date);
+          startOfDay.setUTCHours(0, 0, 0, 0);
+          const endOfDay = new Date(date);
+          endOfDay.setUTCHours(23, 59, 59, 999);
+          showQuery.startTime = { $gte: startOfDay, $lte: endOfDay };
+        }
+
+        const matchingMovieIds = await Show.distinct('movie', showQuery);
+        query._id = { $in: matchingMovieIds };
       }
 
       let sortOption = { rating: -1 };
@@ -85,6 +116,38 @@ const getMovies = async (req, res) => {
             (Array.isArray(m.languages) &&
               m.languages.some((l) => l.toLowerCase() === language.toLowerCase()))
         );
+      }
+
+      if (theatreId || (city && city !== 'All') || date) {
+        let relevantShows = inMemoryShows.filter((s) => s.status !== 'CANCELLED');
+        if (theatreId) {
+          relevantShows = relevantShows.filter(
+            (s) => String(s.theatre?._id || s.theatre) === String(theatreId)
+          );
+        }
+        if (city && city !== 'All') {
+          const cityLower = city.toLowerCase();
+          relevantShows = relevantShows.filter((s) => {
+            const tCity = s.theatre?.city;
+            if (tCity) return tCity.toLowerCase() === cityLower;
+            const tObj = inMemoryTheatres.find(
+              (t) => String(t._id || t.id) === String(s.theatre)
+            );
+            return tObj?.city?.toLowerCase() === cityLower;
+          });
+        }
+        if (date) {
+          const targetDateStr = new Date(date).toISOString().split('T')[0];
+          relevantShows = relevantShows.filter((s) => {
+            const sDateStr = new Date(s.startTime).toISOString().split('T')[0];
+            return sDateStr === targetDateStr;
+          });
+        }
+
+        const movieIdsSet = new Set(
+          relevantShows.map((s) => String(s.movie?._id || s.movie))
+        );
+        filtered = filtered.filter((m) => movieIdsSet.has(String(m._id || m.id)));
       }
 
       if (search && search.trim() !== '') {

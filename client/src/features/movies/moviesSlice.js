@@ -42,6 +42,10 @@ const initialState = {
     status: 'now_showing',
     search: '',
     sort: 'rating',
+    city: 'All',
+    theatreId: '',
+    date: '',
+    page: 1,
   },
   loading: false,
   error: null,
@@ -61,6 +65,10 @@ const moviesSlice = createSlice({
         status: 'now_showing',
         search: '',
         sort: 'rating',
+        city: 'All',
+        theatreId: '',
+        date: '',
+        page: 1,
       };
     },
     clearSelectedMovie: (state) => {

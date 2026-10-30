@@ -2,39 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { toggleSeat, clearSeats } from '../features/booking/bookingSlice';
+import { seatsApi, showsApi } from '../services/api';
 import Button from '../components/common/Button';
+import LoadingSkeleton from '../components/common/LoadingSkeleton';
+import ErrorAlert from '../components/common/ErrorAlert';
 import { toast } from 'react-toastify';
-
-// Realistic seat matrix structure
-const seatTiers = [
-  {
-    tierName: 'Platinum VIP Recliner',
-    price: 16.50,
-    rows: ['A', 'B'],
-    seatsPerRow: 10,
-  },
-  {
-    tierName: 'Gold Executive',
-    price: 14.50,
-    rows: ['C', 'D'],
-    seatsPerRow: 12,
-  },
-  {
-    tierName: 'Silver Standard',
-    price: 12.50,
-    rows: ['E', 'F', 'G'],
-    seatsPerRow: 12,
-  },
-];
-
-// Pre-reserved seats for realistic cinema state
-const reservedSeats = new Set(['A4', 'A5', 'B8', 'C5', 'C6', 'C7', 'D2', 'F6', 'F7']);
-const wheelchairSeats = new Set(['G1', 'G12']);
 
 const SeatSelectionPage = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [searchParams] = useSearchParams();
+
+  const urlShowId = searchParams.get('showId');
+  const urlMovieId = searchParams.get('movieId');
 
   const {
     selectedMovie,
@@ -46,287 +26,387 @@ const SeatSelectionPage = () => {
     convenienceFee,
   } = useSelector((state) => state.booking);
 
-  // Fallback defaults if page was accessed directly
-  const movieTitle = selectedMovie?.title || 'Interstellar: Beyond Time';
-  const theatreName = selectedTheatre?.name || 'IMovies Grand Cinema - Times Square';
-  const showTime = selectedShowtime?.time || '05:15 PM';
-  const showDate = selectedDate || new Date().toISOString().split('T')[0];
+  const showId = urlShowId || selectedShowtime?.id || 'sh101';
 
-  // Hold timer countdown (10 minutes)
-  const [secondsRemaining, setSecondsRemaining] = useState(600);
+  const [layoutData, setLayoutData] = useState(null);
+  const [showDetails, setShowDetails] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setSecondsRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          toast.warning('Seat selection session expired. Please refresh showtimes.');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+  // Load layout inventory from backend API
+  const loadSeatInventory = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [layoutRes, showRes] = await Promise.all([
+        seatsApi.getLayout(showId),
+        showsApi.getById(showId).catch(() => null),
+      ]);
 
-  const formatTimer = (secs) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+      setLayoutData(layoutRes.data);
+      if (showRes?.data) {
+        setShowDetails(showRes.data);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to retrieve real-time seat inventory.');
+    } finally {
+      setLoading(false);
+    }
   };
 
+  useEffect(() => {
+    loadSeatInventory();
+  }, [showId]);
+
+  const movieTitle =
+    showDetails?.movie?.title || selectedMovie?.title || 'Interstellar: Beyond Time';
+  const theatreName =
+    showDetails?.theatre?.name ||
+    selectedTheatre?.name ||
+    'IMovies Grand Cinema - Times Square';
+  const screenName =
+    showDetails?.screenName || selectedTheatre?.screen || 'Audi 1 (IMAX Laser)';
+  const showDate =
+    selectedDate ||
+    (showDetails?.startTime ? new Date(showDetails.startTime).toISOString().split('T')[0] : '');
+
+  // Group seats by tier and row
+  const tiersGrouped = React.useMemo(() => {
+    if (!layoutData?.seats) return [];
+
+    const tierMap = new Map();
+    layoutData.seats.forEach((seat) => {
+      const tName = seat.tier || 'Standard';
+      if (!tierMap.has(tName)) {
+        tierMap.set(tName, {
+          tierName: tName,
+          price: seat.price || 12.5,
+          rows: new Map(),
+        });
+      }
+
+      const tierObj = tierMap.get(tName);
+      if (!tierObj.rows.has(seat.row)) {
+        tierObj.rows.set(seat.row, []);
+      }
+      tierObj.rows.get(seat.row).push(seat);
+    });
+
+    return Array.from(tierMap.values()).map((t) => ({
+      ...t,
+      rowsList: Array.from(t.rows.entries()).map(([rowLabel, rowSeats]) => ({
+        rowLabel,
+        seats: rowSeats.sort((a, b) => a.number - b.number),
+      })),
+    }));
+  }, [layoutData]);
+
   const handleSeatClick = (seatObj) => {
-    if (reservedSeats.has(seatObj.id)) {
-      toast.info(`Seat ${seatObj.id} is already reserved by another customer.`);
+    if (seatObj.status === 'RESERVED') {
+      toast.info(`Seat ${seatObj.seatNumber} is already reserved by another customer.`);
       return;
     }
 
-    const isSelected = selectedSeats.some((s) => s.id === seatObj.id);
+    if (seatObj.status === 'HELD' && !seatObj.isHeldByMe) {
+      toast.warning(`Seat ${seatObj.seatNumber} is currently on temporary hold.`);
+      return;
+    }
+
+    const isSelected = selectedSeats.some((s) => s.id === seatObj.seatNumber);
     if (!isSelected && selectedSeats.length >= 8) {
       toast.warning('Maximum of 8 seats allowed per booking transaction.');
       return;
     }
 
-    dispatch(toggleSeat(seatObj));
+    dispatch(
+      toggleSeat({
+        id: seatObj.seatNumber,
+        row: seatObj.row,
+        number: seatObj.number,
+        tier: seatObj.tier,
+        price: seatObj.price,
+      })
+    );
   };
 
   const handleProceedToCheckout = () => {
     if (selectedSeats.length === 0) {
-      toast.error('Please select at least one seat to proceed.');
+      toast.error('Please select at least one seat to proceed to checkout.');
       return;
     }
     navigate('/checkout');
   };
 
+  const totalPayable = ticketSubtotal + convenienceFee;
+
   return (
     <div className="container py-4">
-      {/* Top Showtime Info & Hold Timer */}
+      {/* Top Screening Context Ribbon */}
       <div className="bg-white border rounded p-3 mb-4 shadow-sm">
-        <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+        <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
           <div>
             <div className="d-flex align-items-center gap-2 mb-1">
-              <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
-                Seat Selection
+              <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2">
+                Seat Inventory Selection
               </span>
-              <span className="text-muted small">Audi 1 (Laser 4K)</span>
+              <span className="text-muted small">Show ID: {showId}</span>
             </div>
             <h1 className="h5 fw-bold text-dark mb-0">{movieTitle}</h1>
-            <div className="text-secondary small">
-              {theatreName} • <strong>{showDate}</strong> at <strong>{showTime}</strong>
+            <div className="text-muted small">
+              {theatreName} • {screenName} {showDate && `• ${showDate}`}
             </div>
           </div>
 
-          {/* Session Timer */}
-          <div className="d-flex align-items-center gap-2 px-3 py-2 bg-light border rounded text-secondary">
-            <i className="bi bi-clock-history text-danger" />
-            <span className="small">
-              Hold expires in: <strong className="text-danger font-monospace">{formatTimer(secondsRemaining)}</strong>
-            </span>
+          <div className="d-flex align-items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
+              onClick={loadSeatInventory}
+              title="Refresh live availability"
+            >
+              <i className="bi bi-arrow-clockwise" />
+              Refresh
+            </button>
+            <Link to="/shows" className="btn btn-sm btn-light border text-secondary">
+              Change Showtime
+            </Link>
           </div>
         </div>
       </div>
 
-      <div className="row g-4">
-        {/* Seat Layout Viewport */}
-        <div className="col-lg-8">
-          <div className="bg-white border rounded p-4 shadow-sm mb-4">
-            {/* Screen Direction Indicator */}
-            <div className="text-center mb-5">
-              <div className="cinema-screen-bar mx-auto mb-2" style={{ maxWidth: '440px' }} />
-              <span
-                className="small text-uppercase text-muted fw-bold tracking-wider"
-                style={{ letterSpacing: '2px', fontSize: '0.75rem' }}
-              >
-                Screen This Way
-              </span>
+      {error && <ErrorAlert message={error} onRetry={loadSeatInventory} className="mb-4" />}
+
+      {/* Accessible Legend Bar (Never rely on color alone) */}
+      <div className="bg-white border rounded p-3 mb-4 shadow-sm">
+        <div className="d-flex flex-wrap justify-content-center align-items-center gap-4 text-secondary small">
+          <div className="d-flex align-items-center gap-2">
+            <div
+              className="border border-2 border-primary rounded text-center d-flex align-items-center justify-content-center"
+              style={{ width: '28px', height: '28px' }}
+            >
+              <span style={{ fontSize: '0.65rem' }}>A1</span>
             </div>
+            <span>Available</span>
+          </div>
 
-            {/* Matrix of Seats by Tier */}
-            <div className="d-flex flex-column gap-4 align-items-center">
-              {seatTiers.map((tier) => (
-                <div key={tier.tierName} className="w-100 text-center">
-                  <div className="d-flex align-items-center justify-content-center gap-2 mb-2">
-                    <span className="small fw-bold text-secondary">{tier.tierName}</span>
-                    <span className="text-muted small">•</span>
-                    <span className="small fw-semibold text-primary">${tier.price.toFixed(2)}</span>
-                  </div>
-
-                  <div className="d-flex flex-column gap-2 align-items-center">
-                    {tier.rows.map((rowLetter) => (
-                      <div key={rowLetter} className="d-flex align-items-center gap-2">
-                        {/* Row letter */}
-                        <span
-                          className="fw-bold text-muted small"
-                          style={{ width: '20px', textAlign: 'center' }}
-                        >
-                          {rowLetter}
-                        </span>
-
-                        {/* Seats in row */}
-                        <div className="d-flex gap-1">
-                          {Array.from({ length: tier.seatsPerRow }).map((_, idx) => {
-                            const seatNumber = idx + 1;
-                            const seatId = `${rowLetter}${seatNumber}`;
-                            const isReserved = reservedSeats.has(seatId);
-                            const isWheelchair = wheelchairSeats.has(seatId);
-                            const isSelected = selectedSeats.some((s) => s.id === seatId);
-
-                            let seatClass = 'available';
-                            if (isReserved) seatClass = 'reserved';
-                            else if (isSelected) seatClass = 'selected';
-                            else if (isWheelchair) seatClass = 'wheelchair';
-
-                            return (
-                              <button
-                                key={seatId}
-                                type="button"
-                                className={`cinema-seat ${seatClass}`}
-                                onClick={() =>
-                                  handleSeatClick({
-                                    id: seatId,
-                                    row: rowLetter,
-                                    number: seatNumber,
-                                    price: tier.price,
-                                    tier: tier.tierName,
-                                  })
-                                }
-                                disabled={isReserved}
-                                title={`Seat ${seatId} (${tier.tierName}) - $${tier.price.toFixed(2)}`}
-                                aria-label={`Seat ${seatId}, ${isReserved ? 'Reserved' : isSelected ? 'Selected' : 'Available'}`}
-                              >
-                                {isWheelchair && !isSelected ? (
-                                  <i className="bi bi-universal-access" />
-                                ) : (
-                                  seatNumber
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Row letter right */}
-                        <span
-                          className="fw-bold text-muted small"
-                          style={{ width: '20px', textAlign: 'center' }}
-                        >
-                          {rowLetter}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+          <div className="d-flex align-items-center gap-2">
+            <div
+              className="bg-primary text-white rounded text-center d-flex align-items-center justify-content-center"
+              style={{ width: '28px', height: '28px' }}
+            >
+              <i className="bi bi-check" />
             </div>
+            <span>Your Selected</span>
+          </div>
 
-            {/* Seat Legend (Accessible with both color, border, and text label) */}
-            <div className="d-flex flex-wrap justify-content-center gap-4 mt-5 pt-4 border-top">
-              <div className="d-flex align-items-center gap-2 small">
-                <span className="cinema-seat available" style={{ width: '22px', height: '22px' }} />
-                <span>Available</span>
-              </div>
-              <div className="d-flex align-items-center gap-2 small">
-                <span className="cinema-seat selected" style={{ width: '22px', height: '22px' }}>
-                  <i className="bi bi-check" />
-                </span>
-                <span className="fw-medium text-primary">Selected</span>
-              </div>
-              <div className="d-flex align-items-center gap-2 small">
-                <span className="cinema-seat reserved" style={{ width: '22px', height: '22px' }} />
-                <span className="text-muted">Reserved</span>
-              </div>
-              <div className="d-flex align-items-center gap-2 small">
-                <span className="cinema-seat wheelchair" style={{ width: '22px', height: '22px' }}>
-                  <i className="bi bi-universal-access" />
-                </span>
-                <span className="text-success">Wheelchair Accessible</span>
-              </div>
+          <div className="d-flex align-items-center gap-2">
+            <div
+              className="bg-light text-muted border border-dashed rounded text-center d-flex align-items-center justify-content-center"
+              style={{ width: '28px', height: '28px' }}
+            >
+              <i className="bi bi-x small" />
             </div>
+            <span>Reserved / Booked</span>
+          </div>
+
+          <div className="d-flex align-items-center gap-2">
+            <div
+              className="bg-warning-subtle text-warning-emphasis border border-warning rounded text-center d-flex align-items-center justify-content-center"
+              style={{ width: '28px', height: '28px' }}
+            >
+              <i className="bi bi-clock-history small" />
+            </div>
+            <span>Held (Temp)</span>
+          </div>
+
+          <div className="d-flex align-items-center gap-2">
+            <div
+              className="border border-2 border-primary rounded text-primary text-center d-flex align-items-center justify-content-center"
+              style={{ width: '28px', height: '28px' }}
+            >
+              <i className="bi bi-person-wheelchair small" />
+            </div>
+            <span>Wheelchair Accessible</span>
           </div>
         </div>
+      </div>
 
-        {/* Booking Summary Panel */}
-        <div className="col-lg-4">
-          <div className="bg-white border rounded p-4 shadow-sm sticky-top" style={{ top: '80px' }}>
-            <h2 className="h6 fw-bold text-dark mb-3 pb-2 border-bottom">Booking Summary</h2>
+      {/* Physical Seat Layout Canvas */}
+      <div className="bg-white border rounded p-4 mb-4 shadow-sm text-center">
+        {/* Curved Screen Banner */}
+        <div className="mx-auto mb-5 text-center" style={{ maxWidth: '640px' }}>
+          <div
+            className="p-1.5 rounded-top border-top border-primary border-4 bg-light shadow-sm mb-1"
+            style={{
+              borderTopLeftRadius: '50% 18px',
+              borderTopRightRadius: '50% 18px',
+            }}
+          >
+            <span
+              className="text-uppercase text-secondary fw-bold"
+              style={{ fontSize: '0.75rem', letterSpacing: '0.2em' }}
+            >
+              <i className="bi bi-display me-2 text-primary" />
+              Auditorium Screen Front
+            </span>
+          </div>
+          <span className="text-muted" style={{ fontSize: '0.65rem' }}>
+            All eyes forward • Sound engineered with Dolby Atmos
+          </span>
+        </div>
 
-            {/* Selected Seats Listing */}
-            <div className="mb-3">
-              <div className="d-flex justify-content-between align-items-center mb-2">
-                <span className="small text-secondary fw-semibold">
-                  Selected Seats ({selectedSeats.length})
-                </span>
-                {selectedSeats.length > 0 && (
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-link text-danger text-decoration-none p-0 small"
-                    onClick={() => dispatch(clearSeats())}
-                  >
-                    Clear All
-                  </button>
-                )}
-              </div>
+        {loading ? (
+          <div className="py-5">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading seating grid...</span>
+            </div>
+          </div>
+        ) : (
+          <div className="d-flex flex-column gap-4 overflow-auto pb-3">
+            {tiersGrouped.map((tier) => (
+              <div key={tier.tierName} className="tier-block">
+                <div className="d-inline-flex align-items-center gap-2 px-3 py-1 bg-light border rounded mb-3">
+                  <span className="fw-bold small text-dark">{tier.tierName} Tier</span>
+                  <span className="text-muted">•</span>
+                  <span className="fw-semibold text-primary small">
+                    ${tier.price.toFixed(2)}
+                  </span>
+                </div>
 
-              {selectedSeats.length > 0 ? (
-                <div className="d-flex flex-wrap gap-1 mb-3">
-                  {selectedSeats.map((seat) => (
-                    <span
-                      key={seat.id}
-                      className="badge bg-primary-subtle text-primary border border-primary-subtle p-2 d-flex align-items-center gap-1"
-                    >
-                      <strong>{seat.id}</strong>
-                      <span className="text-muted small">(${seat.price.toFixed(2)})</span>
-                      <i
-                        className="bi bi-x ms-1 cursor-pointer"
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => dispatch(toggleSeat(seat))}
-                      />
-                    </span>
+                <div className="d-flex flex-column gap-2 align-items-center">
+                  {tier.rowsList.map(({ rowLabel, seats }) => (
+                    <div key={rowLabel} className="d-flex align-items-center gap-2">
+                      <span
+                        className="fw-bold text-muted text-center"
+                        style={{ width: '24px', fontSize: '0.8rem' }}
+                      >
+                        {rowLabel}
+                      </span>
+
+                      <div className="d-flex gap-1.5 justify-content-center">
+                        {seats.map((seat) => {
+                          const isSelected = selectedSeats.some(
+                            (s) => s.id === seat.seatNumber
+                          );
+                          const isReserved = seat.status === 'RESERVED';
+                          const isHeld = seat.status === 'HELD' && !seat.isHeldByMe;
+                          const isWheelchair = seat.type === 'WHEELCHAIR';
+
+                          let seatClasses = 'btn p-0 d-flex align-items-center justify-content-center rounded transition-all ';
+                          if (isSelected) {
+                            seatClasses += 'btn-primary text-white shadow-sm';
+                          } else if (isReserved) {
+                            seatClasses += 'btn-light border text-muted opacity-50 disabled';
+                          } else if (isHeld) {
+                            seatClasses += 'bg-warning-subtle border border-warning text-warning-emphasis disabled';
+                          } else {
+                            seatClasses += 'btn-outline-primary bg-white text-dark border-2';
+                          }
+
+                          return (
+                            <button
+                              key={seat.seatNumber}
+                              type="button"
+                              className={seatClasses}
+                              style={{
+                                width: '34px',
+                                height: '34px',
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                              }}
+                              disabled={isReserved || isHeld}
+                              onClick={() => handleSeatClick(seat)}
+                              aria-label={`Seat ${seat.seatNumber}, ${tier.tierName}, $${seat.price}`}
+                              title={`Seat ${seat.seatNumber} (${seat.status})`}
+                            >
+                              {isSelected ? (
+                                <i className="bi bi-check-lg" />
+                              ) : isReserved ? (
+                                <i className="bi bi-x" />
+                              ) : isHeld ? (
+                                <i className="bi bi-clock" />
+                              ) : isWheelchair ? (
+                                <i className="bi bi-person-wheelchair" />
+                              ) : (
+                                seat.number
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <span
+                        className="fw-bold text-muted text-center"
+                        style={{ width: '24px', fontSize: '0.8rem' }}
+                      >
+                        {rowLabel}
+                      </span>
+                    </div>
                   ))}
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Reservation Summary Footer Strip */}
+      <div className="bg-white border rounded p-3 p-md-4 shadow-sm sticky-bottom" style={{ bottom: '16px' }}>
+        <div className="row g-3 align-items-center">
+          <div className="col-md-7">
+            <div className="d-flex flex-wrap align-items-center gap-2 mb-1">
+              <span className="fw-bold text-dark small">Selected Seats:</span>
+              {selectedSeats.length > 0 ? (
+                selectedSeats.map((s) => (
+                  <span
+                    key={s.id}
+                    className="badge bg-primary text-white d-flex align-items-center gap-1"
+                  >
+                    {s.id}
+                    <i
+                      className="bi bi-x-circle-fill cursor-pointer"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => dispatch(toggleSeat(s))}
+                    />
+                  </span>
+                ))
               ) : (
-                <div className="p-3 bg-light border rounded text-center text-muted small mb-3">
-                  <i className="bi bi-cursor text-primary me-1" />
-                  Click on available seats on the map to begin
-                </div>
+                <span className="text-muted small">No seats selected yet</span>
               )}
             </div>
+            <div className="text-muted small">
+              {selectedSeats.length} of 8 seats selected • Convenience fee: ${convenienceFee.toFixed(2)}
+            </div>
+          </div>
 
-            {/* Price Calculations */}
-            <div className="d-flex flex-column gap-2 mb-3 pb-3 border-bottom small">
-              <div className="d-flex justify-content-between text-secondary">
-                <span>Tickets Subtotal:</span>
-                <span className="fw-semibold text-dark">${ticketSubtotal.toFixed(2)}</span>
+          <div className="col-md-5 d-flex align-items-center justify-content-md-end gap-3">
+            <div className="text-end">
+              <div className="text-muted small" style={{ fontSize: '0.75rem' }}>
+                Estimated Total
               </div>
-              <div className="d-flex justify-content-between text-secondary">
-                <span>Convenience & Booking Fee:</span>
-                <span>${selectedSeats.length > 0 ? convenienceFee.toFixed(2) : '0.00'}</span>
+              <div className="fw-bold fs-5 text-primary">
+                ${totalPayable.toFixed(2)}
               </div>
             </div>
 
-            <div className="d-flex justify-content-between align-items-center mb-4">
-              <span className="fw-bold text-dark">Estimated Total:</span>
-              <span className="h5 fw-bold text-primary mb-0">
-                $
-                {selectedSeats.length > 0
-                  ? (ticketSubtotal + convenienceFee).toFixed(2)
-                  : '0.00'}
-              </span>
-            </div>
+            {selectedSeats.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary"
+                onClick={() => dispatch(clearSeats())}
+              >
+                Clear
+              </button>
+            )}
 
-            {/* Call To Action */}
             <Button
               variant="primary"
-              className="w-100 py-2"
               disabled={selectedSeats.length === 0}
               onClick={handleProceedToCheckout}
             >
-              Proceed to Checkout ({selectedSeats.length} {selectedSeats.length === 1 ? 'Seat' : 'Seats'})
+              Continue to Checkout
+              <i className="bi bi-arrow-right ms-1" />
             </Button>
-
-            <div className="text-center text-muted small mt-2" style={{ fontSize: '0.75rem' }}>
-              <i className="bi bi-shield-check text-success me-1" />
-              Seats are held for 10 minutes upon proceeding
-            </div>
           </div>
         </div>
       </div>

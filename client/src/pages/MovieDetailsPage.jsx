@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchMovieById } from '../features/movies/moviesSlice';
+import { selectShow } from '../features/booking/bookingSlice';
+import { showsApi } from '../services/api';
 import { DetailBannerSkeleton } from '../components/common/LoadingSkeleton';
 import ErrorAlert from '../components/common/ErrorAlert';
 import Modal from '../components/common/Modal';
@@ -15,11 +17,71 @@ const MovieDetailsPage = () => {
   const { selectedMovie, loading, error } = useSelector((state) => state.movies);
   const [isTrailerOpen, setIsTrailerOpen] = useState(false);
 
+  // Date selection for showtimes (next 7 days)
+  const dateOptions = Array.from({ length: 7 }).map((_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    return {
+      iso: d.toISOString().split('T')[0],
+      dayLabel: i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-US', { weekday: 'short' }),
+      dateLabel: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    };
+  });
+
+  const [selectedDate, setSelectedDate] = useState(dateOptions[0].iso);
+  const [shows, setShows] = useState([]);
+  const [showsLoading, setShowsLoading] = useState(false);
+  const [showsError, setShowsError] = useState(null);
+
   useEffect(() => {
     if (id) {
       dispatch(fetchMovieById(id));
     }
   }, [id, dispatch]);
+
+  // Fetch live showtimes for this movie and selected date
+  useEffect(() => {
+    if (id) {
+      setShowsLoading(true);
+      setShowsError(null);
+      showsApi
+        .getAll({ movieId: id, date: selectedDate })
+        .then((res) => setShows(res.data || []))
+        .catch((err) => setShowsError(err.message || 'Unable to load showtimes.'))
+        .finally(() => setShowsLoading(false));
+    }
+  }, [id, selectedDate]);
+
+  const handleSelectShow = (show) => {
+    const theatreObj = show.theatre || {
+      id: 'th-default',
+      name: 'Cinema Venue',
+      screen: show.screenName || 'Audi 1',
+    };
+
+    dispatch(
+      selectShow({
+        movie: selectedMovie,
+        theatre: {
+          id: theatreObj._id || theatreObj.id,
+          name: theatreObj.name,
+          screen: show.screenName || `Audi ${show.screenNumber || 1}`,
+        },
+        date: selectedDate,
+        showtime: {
+          id: show._id || show.id,
+          time: new Date(show.startTime).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          format: show.format,
+          pricing: show.pricing,
+        },
+      })
+    );
+
+    navigate(`/seats?movieId=${id}&showId=${show._id || show.id}`);
+  };
 
   if (loading) {
     return (
@@ -62,10 +124,24 @@ const MovieDetailsPage = () => {
     director,
     cast = [],
     status,
-    theatresCount,
+    accessibility = {},
   } = selectedMovie;
 
   const isNowShowing = status === 'now_showing';
+
+  // Group shows by Theatre
+  const theatreMap = new Map();
+  shows.forEach((show) => {
+    const tId = show.theatre?._id || show.theatre?.id || show.theatre || 'th-unknown';
+    if (!theatreMap.has(tId)) {
+      theatreMap.set(tId, {
+        theatre: show.theatre,
+        shows: [],
+      });
+    }
+    theatreMap.get(tId).shows.push(show);
+  });
+  const groupedTheatres = Array.from(theatreMap.values());
 
   return (
     <div className="movie-details-page pb-5">
@@ -99,6 +175,10 @@ const MovieDetailsPage = () => {
                   alt={title}
                   className="img-fluid rounded"
                   style={{ maxHeight: '420px', width: '100%', objectFit: 'cover' }}
+                  onError={(e) => {
+                    e.target.src =
+                      'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=600&q=80';
+                  }}
                 />
               </div>
             </div>
@@ -109,11 +189,13 @@ const MovieDetailsPage = () => {
                 <Badge variant={isNowShowing ? 'success' : 'warning'}>
                   {isNowShowing ? 'Now Showing' : 'Coming Soon'}
                 </Badge>
-                <span className="badge bg-light text-dark border">{certificate}</span>
-                <span className="text-muted small">
-                  <i className="bi bi-calendar3 me-1" />
-                  Release: {releaseDate}
-                </span>
+                <span className="badge bg-light text-dark border">{certificate || 'PG-13'}</span>
+                {releaseDate && (
+                  <span className="text-muted small">
+                    <i className="bi bi-calendar3 me-1" />
+                    Release: {new Date(releaseDate).toLocaleDateString()}
+                  </span>
+                )}
               </div>
 
               <h1 className="h2 fw-bold text-dark mb-1">{title}</h1>
@@ -123,8 +205,8 @@ const MovieDetailsPage = () => {
               <div className="d-flex flex-wrap align-items-center gap-3 p-3 bg-light border rounded mb-3">
                 <div className="d-flex align-items-center gap-1">
                   <i className="bi bi-star-fill text-warning fs-5" />
-                  <span className="fs-5 fw-bold text-dark">{rating}</span>
-                  <span className="text-muted small">/10 ({votes?.toLocaleString()} votes)</span>
+                  <span className="fs-5 fw-bold text-dark">{rating ? rating.toFixed(1) : '8.2'}</span>
+                  <span className="text-muted small">/10 ({votes ? votes.toLocaleString() : '1,420'} votes)</span>
                 </div>
                 <span className="text-muted">•</span>
                 <div className="text-secondary small">
@@ -134,12 +216,7 @@ const MovieDetailsPage = () => {
                 <span className="text-muted">•</span>
                 <div className="text-secondary small">
                   <i className="bi bi-translate me-1 text-primary" />
-                  <strong>{language}</strong>
-                </div>
-                <span className="text-muted">•</span>
-                <div className="text-secondary small">
-                  <i className="bi bi-building me-1 text-primary" />
-                  In <strong>{theatresCount || 8}</strong> Cinemas
+                  <strong>{language || 'English'}</strong>
                 </div>
               </div>
 
@@ -149,33 +226,55 @@ const MovieDetailsPage = () => {
                   <span className="fw-semibold text-secondary small me-2 align-self-center">
                     Genres:
                   </span>
-                  {genre.map((g, idx) => (
+                  {(Array.isArray(genre) ? genre : [genre]).map((g, idx) => (
                     <Badge key={idx} variant="primary">
                       {g}
                     </Badge>
                   ))}
                 </div>
-                <div className="d-flex flex-wrap gap-1">
-                  <span className="fw-semibold text-secondary small me-2 align-self-center">
-                    Available In:
-                  </span>
-                  {formats.map((f, idx) => (
-                    <Badge key={idx} variant="neutral">
-                      {f}
-                    </Badge>
-                  ))}
-                </div>
+                {formats && formats.length > 0 && (
+                  <div className="d-flex flex-wrap gap-1">
+                    <span className="fw-semibold text-secondary small me-2 align-self-center">
+                      Formats:
+                    </span>
+                    {formats.map((f, idx) => (
+                      <Badge key={idx} variant="neutral">
+                        {f}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Accessibility Information */}
+              <div className="p-2.5 bg-light border rounded d-flex flex-wrap align-items-center gap-3 mb-3 small">
+                <span className="fw-semibold text-dark d-flex align-items-center gap-1">
+                  <i className="bi bi-universal-access-circle text-primary fs-6" />
+                  Accessibility:
+                </span>
+                <span className="text-secondary d-flex align-items-center gap-1">
+                  <i className="bi bi-person-wheelchair text-primary" />
+                  Wheelchair Accessible Seating
+                </span>
+                <span className="text-secondary d-flex align-items-center gap-1">
+                  <i className="bi bi-ear text-primary" />
+                  Assistive Audio
+                </span>
+                <span className="text-secondary d-flex align-items-center gap-1">
+                  <i className="bi bi-badge-cc text-primary" />
+                  Closed Captions
+                </span>
               </div>
 
               {/* Actions */}
-              <div className="d-flex flex-wrap gap-2 pt-2">
-                <Link
-                  to={`/shows?movieId=${_id || selectedMovie.id}`}
+              <div className="d-flex flex-wrap gap-2 pt-1">
+                <a
+                  href="#showtimes-section"
                   className="btn btn-primary fw-medium px-4 d-inline-flex align-items-center gap-2"
                 >
                   <i className="bi bi-ticket-perforated" />
                   Select Showtimes & Seats
-                </Link>
+                </a>
                 <button
                   type="button"
                   className="btn btn-outline-secondary d-inline-flex align-items-center gap-2"
@@ -190,10 +289,125 @@ const MovieDetailsPage = () => {
         </div>
       </section>
 
-      {/* Synopsis & Cast */}
+      {/* Main Content & Live Showtimes */}
       <div className="container">
         <div className="row g-4">
           <div className="col-lg-8">
+            {/* Showtimes & Cinemas Section */}
+            <section id="showtimes-section" className="bg-white border rounded p-4 shadow-sm mb-4">
+              <div className="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2 mb-3 pb-2 border-bottom">
+                <div>
+                  <h2 className="h5 fw-bold text-dark mb-0">Showtimes & Available Cinemas</h2>
+                  <p className="text-muted small mb-0">
+                    Select a date and click any showtime pill to select seats
+                  </p>
+                </div>
+              </div>
+
+              {/* Date Selector Pills */}
+              <div className="d-flex gap-2 overflow-auto pb-2 mb-4">
+                {dateOptions.map((opt) => (
+                  <button
+                    key={opt.iso}
+                    type="button"
+                    className={`btn btn-sm d-flex flex-column align-items-center px-3 py-2 flex-shrink-0 ${
+                      selectedDate === opt.iso
+                        ? 'btn-primary shadow-sm'
+                        : 'btn-light border text-secondary'
+                    }`}
+                    style={{ minWidth: '90px' }}
+                    onClick={() => setSelectedDate(opt.iso)}
+                  >
+                    <span className="fw-bold small">{opt.dayLabel}</span>
+                    <span style={{ fontSize: '0.75rem' }}>{opt.dateLabel}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Showtimes List */}
+              {showsLoading ? (
+                <div className="text-center py-4">
+                  <div className="spinner-border spinner-border-sm text-primary" role="status">
+                    <span className="visually-hidden">Loading showtimes...</span>
+                  </div>
+                </div>
+              ) : showsError ? (
+                <div className="alert alert-warning small mb-0">{showsError}</div>
+              ) : groupedTheatres.length > 0 ? (
+                <div className="d-flex flex-column gap-3">
+                  {groupedTheatres.map(({ theatre, shows: tShows }) => {
+                    const tName = theatre?.name || 'Partner Cinema Multiplex';
+                    const tCity = theatre?.city || 'New York';
+                    const tStreet =
+                      typeof theatre?.address === 'object'
+                        ? theatre?.address?.street
+                        : theatre?.address || '';
+
+                    return (
+                      <div key={theatre?._id || theatre?.id || tName} className="p-3 bg-light border rounded">
+                        <div className="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-1 mb-2">
+                          <div>
+                            <span className="fw-bold text-dark d-flex align-items-center gap-1">
+                              <i className="bi bi-building text-primary" />
+                              {tName}
+                            </span>
+                            {tStreet && (
+                              <span className="text-muted small">
+                                {tStreet}, {tCity}
+                              </span>
+                            )}
+                          </div>
+                          <span className="badge bg-white text-secondary border">
+                            {theatre?.facilities?.[0] || 'Dolby Atmos'}
+                          </span>
+                        </div>
+
+                        {/* Showtimes Pills */}
+                        <div className="d-flex flex-wrap gap-2 pt-2">
+                          {tShows.map((show) => {
+                            const startTime = new Date(show.startTime).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            });
+                            const isPast = new Date(show.startTime) < new Date();
+                            const minPrice = show.pricing?.[0]?.price || 12.5;
+
+                            return (
+                              <button
+                                key={show._id || show.id}
+                                type="button"
+                                className={`btn btn-sm ${
+                                  isPast ? 'btn-light border text-muted disabled' : 'btn-outline-primary'
+                                } d-flex flex-column align-items-center px-3 py-1.5`}
+                                onClick={() => !isPast && handleSelectShow(show)}
+                                disabled={isPast}
+                                title={isPast ? 'Showtime already commenced' : 'Book seats'}
+                              >
+                                <span className="fw-bold">{startTime}</span>
+                                <span style={{ fontSize: '0.65rem' }}>
+                                  {show.format || 'Standard'} • ${minPrice.toFixed(2)}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-4 bg-light rounded border text-muted small">
+                  <i className="bi bi-calendar-x fs-4 d-block mb-1" />
+                  No showtimes currently scheduled for {new Date(selectedDate).toLocaleDateString()}.
+                  <div className="mt-2">
+                    <Link to="/shows" className="btn btn-sm btn-outline-primary">
+                      Browse All Cinema Schedules
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </section>
+
             {/* Synopsis */}
             <div className="bg-white border rounded p-4 shadow-sm mb-4">
               <h2 className="h5 fw-bold text-dark mb-3">About the Movie</h2>
@@ -211,28 +425,32 @@ const MovieDetailsPage = () => {
               <h2 className="h5 fw-bold text-dark mb-3">Top Cast & Characters</h2>
               {cast && cast.length > 0 ? (
                 <div className="row row-cols-2 row-cols-sm-3 row-cols-md-4 g-3">
-                  {cast.map((actor, idx) => (
-                    <div className="col" key={idx}>
-                      <div className="p-2 border rounded bg-light text-center h-100">
-                        <div
-                          className="rounded-circle bg-white border text-primary mx-auto mb-2 d-flex align-items-center justify-content-center fw-bold"
-                          style={{ width: '44px', height: '44px' }}
-                        >
-                          {actor.name.charAt(0)}
-                        </div>
-                        <div className="fw-semibold text-dark small text-truncate" title={actor.name}>
-                          {actor.name}
-                        </div>
-                        <div
-                          className="text-muted small text-truncate"
-                          style={{ fontSize: '0.75rem' }}
-                          title={actor.role}
-                        >
-                          as {actor.role}
+                  {cast.map((actor, idx) => {
+                    const actorName = typeof actor === 'object' ? actor.name || actor.actorName : actor;
+                    const actorRole = typeof actor === 'object' ? actor.role || actor.roleName || 'Cast' : 'Cast';
+                    return (
+                      <div className="col" key={idx}>
+                        <div className="p-2 border rounded bg-light text-center h-100">
+                          <div
+                            className="rounded-circle bg-white border text-primary mx-auto mb-2 d-flex align-items-center justify-content-center fw-bold"
+                            style={{ width: '44px', height: '44px' }}
+                          >
+                            {actorName ? actorName.charAt(0) : 'A'}
+                          </div>
+                          <div className="fw-semibold text-dark small text-truncate" title={actorName}>
+                            {actorName}
+                          </div>
+                          <div
+                            className="text-muted small text-truncate"
+                            style={{ fontSize: '0.75rem' }}
+                            title={actorRole}
+                          >
+                            as {actorRole}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-muted small mb-0">Cast information not listed yet.</p>
@@ -243,20 +461,20 @@ const MovieDetailsPage = () => {
           {/* Sidebar Booking Callout */}
           <div className="col-lg-4">
             <div className="bg-white border rounded p-4 shadow-sm sticky-top" style={{ top: '80px' }}>
-              <h3 className="h6 fw-bold text-dark mb-2">Ready to Watch?</h3>
+              <h3 className="h6 fw-bold text-dark mb-2">Book Tickets Online</h3>
               <p className="text-muted small mb-3">
-                Select your preferred theatre, time, and reserve your seats with contactless e-ticketing.
+                Select your preferred theatre, showtime, and interactive seats with instant e-ticket delivery.
               </p>
-              <Link
-                to={`/shows?movieId=${_id || selectedMovie.id}`}
+              <a
+                href="#showtimes-section"
                 className="btn btn-primary w-100 fw-medium py-2 d-flex align-items-center justify-content-center gap-2 mb-2"
               >
                 <i className="bi bi-calendar-check" />
-                View Cinema Showtimes
-              </Link>
+                Select Showtime Above
+              </a>
               <div className="text-center text-muted small" style={{ fontSize: '0.75rem' }}>
                 <i className="bi bi-shield-check me-1 text-success" />
-                Instant confirmation & flexible cancellation
+                Verified screening schedules & secure booking
               </div>
             </div>
           </div>

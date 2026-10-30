@@ -277,7 +277,7 @@ const Navbar = () => {
                       </Link>
                     </li>
 
-                    {role === 'admin' && (
+                    {(role?.toUpperCase() === 'ADMIN' || user?.role?.toUpperCase() === 'ADMIN') && (
                       <>
                         <li><hr className="dropdown-divider" /></li>
                         <li className="dropdown-header small text-primary fw-bold">Admin Portal</li>
@@ -299,6 +299,36 @@ const Navbar = () => {
                           >
                             <i className="bi bi-camera-reels me-2 text-muted" />
                             Manage Movies
+                          </Link>
+                        </li>
+                        <li>
+                          <Link
+                            className="dropdown-item small"
+                            to="/admin/theatres"
+                            onClick={() => setActiveDropdown(null)}
+                          >
+                            <i className="bi bi-building me-2 text-muted" />
+                            Venues & Screens
+                          </Link>
+                        </li>
+                        <li>
+                          <Link
+                            className="dropdown-item small"
+                            to="/admin/shows"
+                            onClick={() => setActiveDropdown(null)}
+                          >
+                            <i className="bi bi-calendar3 me-2 text-muted" />
+                            Show Scheduling
+                          </Link>
+                        </li>
+                        <li>
+                          <Link
+                            className="dropdown-item small"
+                            to="/admin/bookings"
+                            onClick={() => setActiveDropdown(null)}
+                          >
+                            <i className="bi bi-ticket-perforated me-2 text-muted" />
+                            Bookings Oversight
                           </Link>
                         </li>
                       </>

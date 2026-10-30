@@ -349,7 +349,7 @@ const cancelBooking = async (req, res) => {
  */
 const getAllBookingsAdmin = async (req, res) => {
   try {
-    const { status, page = 1, limit = 20 } = req.query;
+    const { status, search, page = 1, limit = 20 } = req.query;
     const isDBConnected = Booking.db?.readyState === 1;
 
     let bookings = [];
@@ -357,26 +357,53 @@ const getAllBookingsAdmin = async (req, res) => {
 
     if (isDBConnected) {
       const query = {};
-      if (status) query.bookingStatus = status.toUpperCase();
+      if (status && status !== 'ALL') query.bookingStatus = status.toUpperCase();
+      if (search && search.trim()) {
+        const q = search.trim();
+        query.$or = [
+          { bookingReference: { $regex: q, $options: 'i' } },
+          { 'customerInfo.name': { $regex: q, $options: 'i' } },
+          { 'customerInfo.email': { $regex: q, $options: 'i' } },
+        ];
+      }
 
       total = await Booking.countDocuments(query);
       bookings = await Booking.find(query)
         .populate('user', 'name email phone')
-        .populate('movie', 'title')
+        .populate('movie', 'title posterUrl')
         .populate('theatre', 'name city')
         .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
+        .skip((Number(page) - 1) * Number(limit))
         .limit(Number(limit));
     } else {
-      bookings = inMemoryBookings;
-      total = inMemoryBookings.length;
+      let filtered = [...inMemoryBookings];
+      if (status && status !== 'ALL') {
+        filtered = filtered.filter(
+          (b) => b.bookingStatus === status.toUpperCase()
+        );
+      }
+      if (search && search.trim()) {
+        const q = search.trim().toLowerCase();
+        filtered = filtered.filter(
+          (b) =>
+            (b.bookingReference && b.bookingReference.toLowerCase().includes(q)) ||
+            (b.movieTitle && b.movieTitle.toLowerCase().includes(q)) ||
+            (b.customerInfo?.name && b.customerInfo.name.toLowerCase().includes(q)) ||
+            (b.customerInfo?.email && b.customerInfo.email.toLowerCase().includes(q))
+        );
+      }
+      total = filtered.length;
+      bookings = filtered.slice(
+        (Number(page) - 1) * Number(limit),
+        Number(page) * Number(limit)
+      );
     }
 
     return sendSuccess(res, 'All bookings retrieved (Admin)', bookings, 200, {
       total,
       page: Number(page),
       limit: Number(limit),
-      totalPages: Math.ceil(total / limit) || 1,
+      totalPages: Math.ceil(total / Number(limit)) || 1,
     });
   } catch (error) {
     return sendError(res, error.message, 500);

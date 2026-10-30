@@ -71,12 +71,18 @@ export const moviesApi = {
 export const theatresApi = {
   getAll: (params = {}) => api.get('/theatres', { params }),
   getById: (id) => api.get(`/theatres/${id}`),
+  create: (data) => api.post('/theatres', data),
+  update: (id, data) => api.put(`/theatres/${id}`, data),
+  delete: (id) => api.delete(`/theatres/${id}`),
 };
 
 // Shows & Schedules Endpoints
 export const showsApi = {
   getAll: (params = {}) => api.get('/shows', { params }),
   getById: (id) => api.get(`/shows/${id}`),
+  create: (data) => api.post('/shows', data),
+  update: (id, data) => api.put(`/shows/${id}`, data),
+  delete: (id) => api.delete(`/shows/${id}`),
 };
 
 // Seats & Availability Endpoints
@@ -92,6 +98,14 @@ export const bookingsApi = {
   getAll: (params = {}) => api.get('/bookings', { params }),
   getById: (id) => api.get(`/bookings/${id}`),
   cancel: (id, data = {}) => api.post(`/bookings/${id}/cancel`, data),
+  getAllAdmin: (params = {}) => api.get('/bookings/admin/all', { params }),
+};
+
+// Admin Operations Endpoints
+export const adminApi = {
+  getOverview: () => api.get('/admin/overview'),
+  getBookings: (params = {}) => api.get('/bookings/admin/all', { params }),
+  getUsers: (params = {}) => api.get('/users', { params }),
 };
 
 // Payment Endpoints

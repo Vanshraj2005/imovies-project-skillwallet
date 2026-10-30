@@ -76,7 +76,7 @@ let inMemoryShows = [...defaultShows];
  */
 const getShows = async (req, res) => {
   try {
-    const { movieId, theatreId, date } = req.query;
+    const { movieId, theatreId, city, date, futureOnly } = req.query;
     const isDBConnected = Show.db?.readyState === 1;
 
     let shows = [];
@@ -84,25 +84,59 @@ const getShows = async (req, res) => {
       const query = { status: { $ne: 'CANCELLED' } };
       if (movieId && movieId.match(/^[0-9a-fA-F]{24}$/)) query.movie = movieId;
       if (theatreId && theatreId.match(/^[0-9a-fA-F]{24}$/)) query.theatre = theatreId;
+      if (futureOnly === 'true') {
+        query.startTime = { $gte: new Date() };
+      }
       if (date) {
         const startOfDay = new Date(date);
         startOfDay.setUTCHours(0, 0, 0, 0);
         const endOfDay = new Date(date);
         endOfDay.setUTCHours(23, 59, 59, 999);
-        query.startTime = { $gte: startOfDay, $lte: endOfDay };
+        query.startTime = query.startTime
+          ? { ...query.startTime, $gte: startOfDay, $lte: endOfDay }
+          : { $gte: startOfDay, $lte: endOfDay };
       }
 
       shows = await Show.find(query)
         .populate('movie', 'title certificate duration posterUrl rating')
-        .populate('theatre', 'name city address')
+        .populate('theatre', 'name city address facilities accessibility')
         .sort({ startTime: 1 });
+
+      if (city && city !== 'All') {
+        const cityLower = city.toLowerCase();
+        shows = shows.filter(
+          (s) => s.theatre?.city && s.theatre.city.toLowerCase() === cityLower
+        );
+      }
     } else {
-      let filtered = [...inMemoryShows];
+      let filtered = inMemoryShows.filter((s) => s.status !== 'CANCELLED');
       if (movieId) {
-        filtered = filtered.filter((s) => s.movie === movieId || s.movie?._id === movieId);
+        filtered = filtered.filter(
+          (s) => String(s.movie?._id || s.movie) === String(movieId)
+        );
       }
       if (theatreId) {
-        filtered = filtered.filter((s) => s.theatre === theatreId || s.theatre?._id === theatreId);
+        filtered = filtered.filter(
+          (s) => String(s.theatre?._id || s.theatre) === String(theatreId)
+        );
+      }
+      if (city && city !== 'All') {
+        const cityLower = city.toLowerCase();
+        filtered = filtered.filter((s) => {
+          const tCity = s.theatre?.city;
+          return tCity && tCity.toLowerCase() === cityLower;
+        });
+      }
+      if (date) {
+        const targetDateStr = new Date(date).toISOString().split('T')[0];
+        filtered = filtered.filter((s) => {
+          const sDateStr = new Date(s.startTime).toISOString().split('T')[0];
+          return sDateStr === targetDateStr;
+        });
+      }
+      if (futureOnly === 'true') {
+        const now = new Date();
+        filtered = filtered.filter((s) => new Date(s.startTime) >= now);
       }
       shows = filtered;
     }
@@ -152,7 +186,7 @@ const createShow = async (req, res) => {
     const {
       movie,
       theatre,
-      screenNumber,
+      screenNumber = 1,
       screenName,
       format,
       startTime,
@@ -169,18 +203,68 @@ const createShow = async (req, res) => {
       );
     }
 
-    const isDBConnected = Show.db?.readyState === 1;
-    let created;
+    const start = new Date(startTime);
+    const end = new Date(endTime);
 
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start >= end) {
+      return sendError(
+        res,
+        'Invalid show timings: Start time must precede end time.',
+        400
+      );
+    }
+
+    const scrNum = Number(screenNumber) || 1;
+    const isDBConnected = Show.db?.readyState === 1;
+
+    // Enforce Screen Overlap Prevention: Two shows on same screen cannot overlap
+    if (isDBConnected) {
+      const conflict = await Show.findOne({
+        theatre,
+        screenNumber: scrNum,
+        status: { $ne: 'CANCELLED' },
+        startTime: { $lt: end },
+        endTime: { $gt: start },
+      });
+
+      if (conflict) {
+        return sendError(
+          res,
+          `Scheduling conflict: Screen ${scrNum} already has a show scheduled between ${conflict.startTime.toISOString()} and ${conflict.endTime.toISOString()}.`,
+          409
+        );
+      }
+    } else {
+      const theatreIdStr = String(theatre._id || theatre);
+      const conflict = inMemoryShows.find((s) => {
+        if (s.status === 'CANCELLED') return false;
+        const sTheatre = String(s.theatre?._id || s.theatre);
+        if (sTheatre !== theatreIdStr) return false;
+        if (Number(s.screenNumber || 1) !== scrNum) return false;
+        const sStart = new Date(s.startTime);
+        const sEnd = new Date(s.endTime);
+        return start < sEnd && end > sStart;
+      });
+
+      if (conflict) {
+        return sendError(
+          res,
+          `Scheduling conflict: Screen ${scrNum} already has a show scheduled between ${new Date(conflict.startTime).toISOString()} and ${new Date(conflict.endTime).toISOString()}.`,
+          409
+        );
+      }
+    }
+
+    let created;
     if (isDBConnected) {
       created = await Show.create({
         movie,
         theatre,
-        screenNumber: Number(screenNumber) || 1,
-        screenName: screenName || `Audi ${screenNumber || 1}`,
+        screenNumber: scrNum,
+        screenName: screenName || `Audi ${scrNum}`,
         format: format || 'Standard 2D',
-        startTime: new Date(startTime),
-        endTime: new Date(endTime),
+        startTime: start,
+        endTime: end,
         pricing: Array.isArray(pricing) ? pricing : [{ tier: 'Standard', price: 12.5 }],
         totalSeats: Number(totalSeats) || 120,
         availableSeatsCount: Number(totalSeats) || 120,
@@ -191,11 +275,11 @@ const createShow = async (req, res) => {
         id: `sh_${Date.now()}`,
         movie,
         theatre,
-        screenNumber: Number(screenNumber) || 1,
-        screenName: screenName || `Audi ${screenNumber || 1}`,
+        screenNumber: scrNum,
+        screenName: screenName || `Audi ${scrNum}`,
         format: format || 'Standard 2D',
-        startTime: new Date(startTime),
-        endTime: new Date(endTime),
+        startTime: start,
+        endTime: end,
         pricing: Array.isArray(pricing) ? pricing : [{ tier: 'Standard', price: 12.5 }],
         status: 'SCHEDULED',
         totalSeats: Number(totalSeats) || 120,
@@ -217,7 +301,58 @@ const createShow = async (req, res) => {
 const updateShow = async (req, res) => {
   try {
     const { id } = req.params;
+    const { startTime, endTime, screenNumber, theatre } = req.body;
     const isDBConnected = Show.db?.readyState === 1;
+
+    // Validate times if both are provided or being updated
+    if (startTime && endTime) {
+      const start = new Date(startTime);
+      const end = new Date(endTime);
+      if (isNaN(start.getTime()) || isNaN(end.getTime()) || start >= end) {
+        return sendError(res, 'Invalid show timings: Start time must precede end time.', 400);
+      }
+
+      const scrNum = screenNumber !== undefined ? Number(screenNumber) : 1;
+
+      // Check conflict excluding current show
+      if (isDBConnected && id.match(/^[0-9a-fA-F]{24}$/)) {
+        const query = {
+          _id: { $ne: id },
+          screenNumber: scrNum,
+          status: { $ne: 'CANCELLED' },
+          startTime: { $lt: end },
+          endTime: { $gt: start },
+        };
+        if (theatre) query.theatre = theatre;
+
+        const conflict = await Show.findOne(query);
+        if (conflict) {
+          return sendError(
+            res,
+            `Scheduling conflict: Screen ${scrNum} already has a show scheduled between ${conflict.startTime.toISOString()} and ${conflict.endTime.toISOString()}.`,
+            409
+          );
+        }
+      } else {
+        const conflict = inMemoryShows.find((s) => {
+          if (s._id === id || s.id === id) return false;
+          if (s.status === 'CANCELLED') return false;
+          if (theatre && String(s.theatre?._id || s.theatre) !== String(theatre)) return false;
+          if (screenNumber !== undefined && Number(s.screenNumber || 1) !== scrNum) return false;
+          const sStart = new Date(s.startTime);
+          const sEnd = new Date(s.endTime);
+          return start < sEnd && end > sStart;
+        });
+
+        if (conflict) {
+          return sendError(
+            res,
+            `Scheduling conflict: Screen ${scrNum} already has a show scheduled between ${new Date(conflict.startTime).toISOString()} and ${new Date(conflict.endTime).toISOString()}.`,
+            409
+          );
+        }
+      }
+    }
 
     let updated = null;
     if (isDBConnected && id.match(/^[0-9a-fA-F]{24}$/)) {
